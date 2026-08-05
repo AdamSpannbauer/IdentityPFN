@@ -1,0 +1,42 @@
+[project]
+name = "identitypfn"
+version = "0.1.0"
+description = "A small tabular foundation model for entity resolution"
+readme = "README.md"
+requires-python = ">=3.13,<3.14"
+dependencies = [
+    "duckdb>=1.5.4",
+    "faker>=40.23.0",
+    "nlpaug>=1.1.11",
+    "numpy>=2.3.5",
+    "pandas>=2.3.3,<3",
+    "phonenumbers>=9.0.20",
+    "schedulefree>=1.4.1",
+    "scikit-learn>=1.7.2",
+    "sentence-transformers>=5.5.1",
+    "tabulate>=0.10.0",
+    "torch>=2.12.0",
+]
+
+[project.optional-dependencies]
+fasttext = [
+    "fasttext>=0.9.3",
+]
+ollama = [
+    "ollama>=0.6.1",
+]
+baselines = [
+    "networkx>=3.6.1",
+    "pyjedai>=0.2.9",
+    "splink>=4.0.11",
+]
+
+[dependency-groups]
+dev = [
+    "ipykernel>=7.3.0",
+    "jupyter>=1.1.1",
+    "matplotlib>=3.10.8",
+]
+
+[tool.uv]
+package = false

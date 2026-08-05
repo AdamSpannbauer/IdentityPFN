@@ -1,0 +1,414 @@
+{
+  "_schema": {
+    "description": "Benchmark manifest for IdentityPFN diagnostics.",
+    "current_loader_notes": [
+      "Only kind=single_table is currently supported by load_benchmarks.",
+      "Top-level keys starting with _ are ignored by the loader.",
+      "Paths are relative to benchmark_data/.",
+      "Every current benchmark entry must point to one single-table CSV via file."
+    ],
+    "allowed_values": {
+      "kind": {
+        "single_table": "One benchmark table with an entity_id_column; equal IDs define entity clusters.",
+        "two_table": "Reserved for future two-table linkage input.",
+        "multi_table": "Reserved for future multi-table/entity graph input."
+      },
+      "text_profile": {
+        "none": "No meaningful text-like fields.",
+        "short_fields": "Mostly short names, identifiers, locations, or compact labels.",
+        "long_or_semantic_text": "Contains titles, descriptions, abstracts, bios, reviews, or other multi-token semantic text.",
+        "mixed": "Contains both short fields and at least one longer semantic text field."
+      },
+      "field_types": {
+        "text": "Free text or string value embedded by the text backend.",
+        "categorical": "Discrete category encoded with learned category embeddings.",
+        "numeric": "Numeric value normalized within table and column.",
+        "date": "Parseable date encoded with year/month/day/weekday components.",
+        "identifier": "Identifier-like string routed through text embedding but marked semantically.",
+        "email": "Email-like identifier with optional normalization.",
+        "phone": "Phone-like identifier with optional normalization."
+      }
+    },
+    "required_keys_by_kind": {
+      "single_table": [
+        "kind",
+        "description",
+        "file",
+        "entity_id_column",
+        "field_types"
+      ]
+    },
+    "single_table_input_keys": {
+      "file": "Required path to one CSV file relative to benchmark_data/."
+    },
+    "optional_keys": {
+      "short_description": "Brief table-ready benchmark description.",
+      "text_profile": "Semantic profile of the benchmark's text fields.",
+      "ignored_columns": "Columns documented as intentionally excluded from model input.",
+      "entity_sample": "Deterministic entity-level sampling configuration."
+    },
+    "entity_sample": {
+      "n_entities": "Positive integer number of entity clusters to sample.",
+      "seed": "Integer deterministic sampling seed.",
+      "require_positive_pairs": "Boolean; if true, keep only clusters with at least two records.",
+      "require_variation": "Boolean; if true, keep only clusters with non-identical records across selected model-input fields."
+    }
+  },
+  "fake_1000": {
+    "kind": "single_table",
+    "description": "Synthetic person-style deduplication benchmark with known cluster IDs.",
+    "short_description": "Synthetic person records",
+    "text_profile": "short_fields",
+    "file": "fake_1000.csv",
+    "entity_id_column": "cluster",
+    "ignored_columns": [
+      "unique_id"
+    ],
+    "field_types": {
+      "first_name": "text",
+      "surname": "text",
+      "dob": "text",
+      "city": "categorical",
+      "email": "text"
+    }
+  },
+  "sim_er_data": {
+    "kind": "single_table",
+    "description": "SimERData person benchmark with company field and persistent ENTITY_ID clusters.",
+    "short_description": "SimERData person records with company",
+    "text_profile": "short_fields",
+    "file": "sim_er_data.csv",
+    "entity_id_column": "ENTITY_ID",
+    "ignored_columns": [
+      "record_id"
+    ],
+    "field_types": {
+      "first_name": "text",
+      "last_name": "text",
+      "date_of_birth": "text",
+      "SSN": "text",
+      "email": "text",
+      "street_address": "text",
+      "city": "text",
+      "state": "categorical",
+      "zip": "categorical",
+      "company": "text"
+    }
+  },
+  "nc_voters_shared": {
+    "kind": "single_table",
+    "description": "Deterministic sample of NC voter records shared across five modified snapshots.",
+    "short_description": "NC voter records, shared sample",
+    "text_profile": "short_fields",
+    "file": "converted/nc_voters.csv",
+    "entity_id_column": "entity_id",
+    "ignored_columns": [
+      "source_table",
+      "source_id",
+      "price_raw"
+    ],
+    "field_types": {
+      "givenname": "text",
+      "surname": "text",
+      "suburb": "text",
+      "postcode": "identifier"
+    },
+    "entity_sample": {
+      "n_entities": 200,
+      "seed": 0,
+      "require_positive_pairs": true,
+      "require_variation": false
+    }
+  },
+  "nc_voters_changed": {
+    "kind": "single_table",
+    "description": "Deterministic NC voter shared-entity sample requiring variation across modified snapshots.",
+    "short_description": "NC voter records, changed sample",
+    "text_profile": "short_fields",
+    "file": "converted/nc_voters.csv",
+    "entity_id_column": "entity_id",
+    "ignored_columns": [
+      "source_table",
+      "source_id"
+    ],
+    "field_types": {
+      "givenname": "text",
+      "surname": "text",
+      "suburb": "text",
+      "postcode": "identifier"
+    },
+    "entity_sample": {
+      "n_entities": 200,
+      "seed": 1,
+      "require_positive_pairs": true,
+      "require_variation": true
+    }
+  },
+  "bpid_matching_balanced": {
+    "kind": "single_table",
+    "description": "BPID labeled person-profile matching pairs converted into a balanced single-table clustering benchmark.",
+    "short_description": "BPID person identity profiles",
+    "text_profile": "short_fields",
+    "file": "converted/bpid_matching_balanced.csv",
+    "entity_id_column": "entity_id",
+    "ignored_columns": [
+      "pair_id",
+      "source_table",
+      "source_id",
+      "match_label"
+    ],
+    "field_types": {
+      "fullname": "text",
+      "email": "email",
+      "phone": "phone",
+      "addr": "text",
+      "dob": "date"
+    }
+  },
+  "amazon_google": {
+    "kind": "single_table",
+    "description": "Amazon-Google product linkage data converted into one single-table clustering benchmark with raw price treated as text.",
+    "short_description": "Amazon-Google products",
+    "text_profile": "mixed",
+    "file": "converted/amazon_google.csv",
+    "entity_id_column": "entity_id",
+    "ignored_columns": [
+      "source_table",
+      "source_id"
+    ],
+    "field_types": {
+      "title": "text",
+      "description": "text",
+      "manufacturer": "text",
+      "price": "text"
+    },
+    "entity_sample": {
+      "n_entities": 500,
+      "seed": 0,
+      "require_positive_pairs": true,
+      "require_variation": false
+    }
+  },
+  "dblp_acm": {
+    "kind": "single_table",
+    "description": "DBLP-ACM publication linkage data converted into one single-table clustering benchmark.",
+    "short_description": "DBLP-ACM publications",
+    "text_profile": "mixed",
+    "file": "converted/dblp_acm.csv",
+    "entity_id_column": "entity_id",
+    "ignored_columns": [
+      "source_table",
+      "source_id"
+    ],
+    "field_types": {
+      "title": "text",
+      "authors": "text",
+      "venue": "text",
+      "year": "categorical"
+    },
+    "entity_sample": {
+      "n_entities": 500,
+      "seed": 0,
+      "require_positive_pairs": true,
+      "require_variation": false
+    }
+  },
+  "dblp_google_scholar": {
+    "kind": "single_table",
+    "description": "DBLP-GoogleScholar publication linkage data converted into one single-table clustering benchmark.",
+    "short_description": "DBLP-Google Scholar publications",
+    "text_profile": "mixed",
+    "file": "converted/dblp_google_scholar.csv",
+    "entity_id_column": "entity_id",
+    "ignored_columns": [
+      "source_table",
+      "source_id"
+    ],
+    "field_types": {
+      "title": "text",
+      "authors": "text",
+      "venue": "text",
+      "year": "text"
+    },
+    "entity_sample": {
+      "n_entities": 500,
+      "seed": 0,
+      "require_positive_pairs": true,
+      "require_variation": false
+    }
+  },
+  "fodors_zagats": {
+    "kind": "single_table",
+    "description": "Fodors-Zagats restaurant linkage data converted into one single-table clustering benchmark.",
+    "short_description": "Fodors-Zagats restaurants",
+    "text_profile": "short_fields",
+    "file": "converted/fodors_zagats.csv",
+    "entity_id_column": "entity_id",
+    "ignored_columns": [
+      "source_table",
+      "source_id"
+    ],
+    "field_types": {
+      "name": "text",
+      "addr": "text",
+      "city": "text",
+      "phone": "phone",
+      "type": "text"
+    },
+    "entity_sample": {
+      "n_entities": 112,
+      "seed": 0,
+      "require_positive_pairs": true,
+      "require_variation": false
+    }
+  },
+  "walmart_amazon": {
+    "kind": "single_table",
+    "description": "Walmart-Amazon product linkage data converted into one single-table clustering benchmark.",
+    "short_description": "Walmart-Amazon products",
+    "text_profile": "mixed",
+    "file": "converted/walmart_amazon.csv",
+    "entity_id_column": "entity_id",
+    "ignored_columns": [
+      "source_table",
+      "source_id"
+    ],
+    "field_types": {
+      "title": "text",
+      "brand": "text",
+      "modelno": "identifier",
+      "category": "text",
+      "price": "numeric",
+      "description": "text"
+    },
+    "entity_sample": {
+      "n_entities": 500,
+      "seed": 0,
+      "require_positive_pairs": true,
+      "require_variation": false
+    }
+  },
+  "amazon_google_price_numeric": {
+    "kind": "single_table",
+    "description": "Amazon-Google product linkage benchmark with price cleaned into a numeric field.",
+    "short_description": "Amazon-Google products, numeric price",
+    "text_profile": "mixed",
+    "file": "converted/amazon_google_price_numeric.csv",
+    "entity_id_column": "entity_id",
+    "ignored_columns": [
+      "source_table",
+      "source_id"
+    ],
+    "field_types": {
+      "title": "text",
+      "description": "text",
+      "manufacturer": "text",
+      "price": "numeric"
+    },
+    "entity_sample": {
+      "n_entities": 500,
+      "seed": 0,
+      "require_positive_pairs": true,
+      "require_variation": false
+    }
+  },
+  "amazon_google_price_both": {
+    "kind": "single_table",
+    "description": "Amazon-Google product linkage benchmark with raw price text and cleaned numeric price.",
+    "short_description": "Amazon-Google products, text and numeric price",
+    "text_profile": "mixed",
+    "file": "converted/amazon_google_price_both.csv",
+    "entity_id_column": "entity_id",
+    "ignored_columns": [
+      "source_table",
+      "source_id"
+    ],
+    "field_types": {
+      "title": "text",
+      "description": "text",
+      "manufacturer": "text",
+      "price_text": "text",
+      "price_numeric": "numeric"
+    },
+    "entity_sample": {
+      "n_entities": 500,
+      "seed": 0,
+      "require_positive_pairs": true,
+      "require_variation": false
+    }
+  },
+  "ice_id_people_200": {
+    "kind": "single_table",
+    "description": "ICE-ID Icelandic census person records sampled from labeled longitudinal identity clusters.",
+    "short_description": "ICE-ID census person records",
+    "text_profile": "short_fields",
+    "file": "converted/ice_id_people.csv",
+    "entity_id_column": "entity_id",
+    "ignored_columns": [
+      "source_table",
+      "source_id",
+      "partner",
+      "father",
+      "mother"
+    ],
+    "field_types": {
+      "census_year": "numeric",
+      "full_name": "text",
+      "first_name": "text",
+      "middle_name": "text",
+      "patronym": "text",
+      "surname": "text",
+      "birthyear": "numeric",
+      "sex": "categorical",
+      "status": "text",
+      "marriagestatus": "categorical",
+      "farm": "categorical",
+      "county": "categorical",
+      "parish": "categorical",
+      "district": "categorical"
+    },
+    "entity_sample": {
+      "n_entities": 200,
+      "seed": 0,
+      "require_positive_pairs": true,
+      "require_variation": true
+    }
+  },
+  "ice_id_people_500": {
+    "kind": "single_table",
+    "description": "ICE-ID Icelandic census person records sampled from labeled longitudinal identity clusters.",
+    "short_description": "ICE-ID census person records",
+    "text_profile": "short_fields",
+    "file": "converted/ice_id_people.csv",
+    "entity_id_column": "entity_id",
+    "ignored_columns": [
+      "source_table",
+      "source_id",
+      "partner",
+      "father",
+      "mother"
+    ],
+    "field_types": {
+      "census_year": "numeric",
+      "full_name": "text",
+      "first_name": "text",
+      "middle_name": "text",
+      "patronym": "text",
+      "surname": "text",
+      "birthyear": "numeric",
+      "sex": "categorical",
+      "status": "text",
+      "marriagestatus": "categorical",
+      "farm": "identifier",
+      "county": "identifier",
+      "parish": "identifier",
+      "district": "identifier"
+    },
+    "entity_sample": {
+      "n_entities": 500,
+      "seed": 0,
+      "require_positive_pairs": true,
+      "require_variation": true
+    }
+  }
+}
