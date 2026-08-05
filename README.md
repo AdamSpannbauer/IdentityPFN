@@ -1,7 +1,7 @@
 # IdentityPFN
 
 <p align="center">
-  <img src="docs/figs/paradigm.png" alt="IdentityPFN zero-shot entity resolution workflow" width="70%">
+  <img src="docs/figs/paradigm.png" alt="IdentityPFN zero-shot entity resolution workflow" width="50%">
 </p>
 
 IdentityPFN is an open-source toolkit for zero-shot entity resolution: load a
@@ -43,7 +43,6 @@ pair_review_table(scores, records, k=10)
 </p>
 
 At a high level:
-<img src="docs/figs/dgp_three_panel.png" alt="Synthetic identity world generation" width="40%">
 
 - Synthetic identity worlds teach the model reusable priors over names,
   identifiers, contact fields, missingness, corruption, and cross-field
@@ -61,7 +60,7 @@ At a high level:
   `identitypfn/train.py`
 - Synthetic identity priors: `identitypfn/dgp/people/wag.py`,
   `identitypfn/dgp/people/simple.py`, `identitypfn/dgp/people/wag_rules/`, and
-  `dgp_data/`
+  `dgp_data/` <img align="right" src="docs/figs/dgp_three_panel.png" alt="Synthetic identity world generation" width="25%">
 - Experiment entry points: `run_benchmark_experiment.py`, `run_dgp_smoke.py`,
   and related `run_*.py` diagnostics
 - Paper checkpoints: `results/model_checkpoints/`
