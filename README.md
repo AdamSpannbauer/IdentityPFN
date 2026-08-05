@@ -1,9 +1,9 @@
 # IdentityPFN
 
-IdentityPFN is a prior-data fitted network for zero-shot entity resolution. It
-is trained on synthetic identity worlds and applies one frozen model to an
-unseen record table without target-domain labels, gradient updates, or
-benchmark-specific fitting.
+IdentityPFN is an open-source toolkit for zero-shot entity resolution: load a
+frozen checkpoint, score duplicate likelihoods across records, and inspect the
+highest-confidence links without target-domain labels or benchmark-specific
+training.
 
 This repository is the anonymous artifact for **“IdentityPFN: Learning
 Identity Priors for Zero-Shot Entity Resolution.”** It contains the model and
@@ -11,12 +11,52 @@ synthetic data generator, paper checkpoints, evaluation scripts, compact
 result tables, and configuration metadata. Benchmark records that cannot be
 safely redistributed are intentionally excluded.
 
+## Quick start
+
+The fastest way to see the intended user workflow is the demo notebook:
+
+[`notebooks/demo_zero_shot_linking.ipynb`](notebooks/demo_zero_shot_linking.ipynb)
+
+It loads a released checkpoint, scores a small record table, plots an adjacency
+heatmap, retrieves nearest neighbors, and builds a side-by-side review table.
+The core API is intentionally small:
+
+```python
+from identitypfn import load_model, nearest_neighbors, pair_review_table, top_pairs
+
+model = load_model("results/model_checkpoints/20260715_195803_seed1337_20005214_best_step1500.pt")
+scores = model.predict_proba(records, field_types)
+
+top_pairs(scores, k=10)
+nearest_neighbors(scores, k=3)
+pair_review_table(scores, records, k=10)
+```
+
+## How it works
+
+<!-- TODO: add rendered architecture overview here, e.g. docs/identitypfn_overview.png -->
+
+At a high level:
+
+- Synthetic identity worlds teach the model reusable priors over names,
+  identifiers, contact fields, missingness, corruption, and cross-field
+  evidence.
+- The tokenizer embeds heterogeneous table values with field-type hints.
+- The PFN scores the full record-by-record adjacency matrix in one forward
+  pass.
+- Helper functions turn the score matrix into top-pair, nearest-neighbor, and
+  review-table views for inspection.
+
 ## Repository contents
 
-- Core model and training code: `model.py`, `tokenizer.py`, `train.py`, and
-  `run_benchmark_experiment.py`
-- Synthetic identity prior: `person_wag_dgp_prototype.py`,
-  `person_data_generation.py`, `wag_rules/`, and `dgp_data/`
+- Core model and inference code: `identitypfn/model.py`,
+  `identitypfn/tokenizer.py`, `identitypfn/inference.py`, and
+  `identitypfn/train.py`
+- Synthetic identity priors: `identitypfn/dgp/people/wag.py`,
+  `identitypfn/dgp/people/simple.py`, `identitypfn/dgp/people/wag_rules/`, and
+  `dgp_data/`
+- Experiment entry points: `run_benchmark_experiment.py`, `run_dgp_smoke.py`,
+  and related `run_*.py` diagnostics
 - Paper checkpoints: `results/model_checkpoints/`
 - Paper result inputs and summaries: `results/`
 - Classical and LLM-selector comparison runners: `baselines/`
