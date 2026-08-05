@@ -13,7 +13,8 @@ import numpy as np
 import pandas as pd
 from faker import Faker
 
-from world import PrimitiveType, World, sample_entity_ids
+from ..paths import repository_path
+from .world import PrimitiveType, World, sample_entity_ids
 
 AccountBioBackend = Literal["template", "ollama"]
 
@@ -196,7 +197,7 @@ def make_schema_columns(families: list[FieldFamily]) -> list[SchemaColumn]:
 
 @lru_cache
 def load_us_locations(
-    path: Path = Path("dgp_data/geonames_us_zip_data/US.txt"),
+    path: Path = repository_path("dgp_data", "geonames_us_zip_data", "US.txt"),
 ) -> tuple[Location, ...]:
     """Load GeoNames rows containing complete ZIP, city, and state values."""
     columns = [
@@ -232,7 +233,9 @@ def _read_carlton_nickname_pairs(path: Path) -> list[tuple[str, str]]:
 
 @lru_cache
 def load_nickname_aliases(
-    carlton_path: Path = Path("dgp_data/corruption/nicknames/names.csv"),
+    carlton_path: Path = repository_path(
+        "dgp_data", "corruption", "nicknames", "names.csv"
+    ),
 ) -> dict[str, tuple[str, ...]]:
     """Load direct bidirectional nickname aliases without transitive closure."""
     aliases = defaultdict(set)
@@ -308,7 +311,7 @@ def _generate_ollama_account_bio(
     max_retries: int,
 ) -> str:
     """Generate one account bio with strict scalar JSON validation."""
-    from call_ollama import call_ollama_json
+    from ..call_ollama import call_ollama_json
 
     options = None if temperature is None else {"temperature": temperature}
     system_prompt = (

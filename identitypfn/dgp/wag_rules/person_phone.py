@@ -5,9 +5,10 @@ from pathlib import Path
 
 import numpy as np
 
+from ...paths import repository_path
 
-AREA_CODE_DATA_PATH = Path(
-    "dgp_data/area_codes/area_codes_bennetyeedogorg_ucsd_pages_area_html.csv"
+AREA_CODE_DATA_PATH = repository_path(
+    "dgp_data", "area_codes", "area_codes_bennetyeedogorg_ucsd_pages_area_html.csv"
 )
 
 DGP_STATE_CODES = frozenset(

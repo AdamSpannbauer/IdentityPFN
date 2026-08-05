@@ -6,45 +6,45 @@ from faker import Faker
 import numpy as np
 import pandas as pd
 
-from call_ollama import OllamaModel, call_ollama_json
-from person_data_generation import (
+from ..call_ollama import OllamaModel, call_ollama_json
+from .person_data_generation import (
     Location,
     ObservationConfig,
     _temporary_global_seed,
     get_character_augmenters,
     load_us_locations,
 )
-from wag_rules.person_account_bio import (
+from .wag_rules.person_account_bio import (
     make_bio_company_location,
     make_bio_full_context,
     make_bio_name_company,
     make_bio_name_location,
     make_sparse_crm_note,
 )
-from wag_rules.person_email import (
+from .wag_rules.person_email import (
     make_personal_email,
     make_personal_email_with_dob,
     make_role_email,
     make_work_email,
 )
-from wag_rules.person_id import (
+from .wag_rules.person_id import (
     make_account_id,
     make_customer_id,
     make_external_id_from_name,
     make_source_system_id,
 )
-from wag_rules.person_phone import (
+from .wag_rules.person_phone import (
     make_independent_phone,
     make_phone_from_city_state,
     make_phone_from_state,
 )
-from wag_rules.person_username import (
+from .wag_rules.person_username import (
     make_independent_username,
     make_username_from_name,
     make_username_from_name_company,
     make_username_from_name_dob,
 )
-from world import World, sample_entity_ids
+from .world import World, sample_entity_ids
 
 PrimitiveType = Literal[
     "text", "categorical", "numeric", "date", "identifier", "email", "phone"

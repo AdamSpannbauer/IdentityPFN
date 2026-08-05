@@ -3,13 +3,13 @@ from argparse import ArgumentParser
 import numpy as np
 from sklearn.metrics import average_precision_score
 
-from data_loader import SyntheticWorldDataLoader
-from model import NanoERPFNLinker, NanoERPFNModel
-from person_data_generation import generate_worlds as generate_person_worlds
-from person_wag_dgp_prototype import generate_worlds as generate_wag_worlds
-from tokenizer import Tokenizer
-from train import train
-from utils import get_default_device, set_randomness_seed
+from identitypfn.data_loader import SyntheticWorldDataLoader
+from identitypfn.model import NanoERPFNLinker, NanoERPFNModel
+from identitypfn.dgp.person_data_generation import generate_worlds as generate_person_worlds
+from identitypfn.dgp.person_wag_dgp_prototype import generate_worlds as generate_wag_worlds
+from identitypfn.tokenizer import Tokenizer
+from identitypfn.train import train
+from identitypfn.utils import get_default_device, set_randomness_seed
 
 
 def evaluate_synthetic_worlds(

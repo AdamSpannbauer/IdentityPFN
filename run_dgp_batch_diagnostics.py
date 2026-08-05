@@ -3,7 +3,7 @@ from collections import Counter
 
 import numpy as np
 
-from data_loader import SyntheticWorldDataLoader
+from identitypfn.data_loader import SyntheticWorldDataLoader
 
 
 def summarize(values: list[float]) -> dict[str, float]:

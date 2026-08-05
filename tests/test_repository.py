@@ -7,8 +7,8 @@ import pandas as pd
 import torch
 
 from identitypfn import load_model, nearest_neighbors, pair_review_table, top_pairs
-from person_wag_dgp_prototype import generate_worlds
-from train import load_benchmarks
+from identitypfn.dgp.person_wag_dgp_prototype import generate_worlds
+from identitypfn.train import load_benchmarks
 
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[1]

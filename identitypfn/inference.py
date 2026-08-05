@@ -7,9 +7,9 @@ import numpy as np
 import pandas as pd
 import torch
 
-from model import NanoERPFNModel
-from tokenizer import Tokenizer
-from utils import get_default_device
+from .model import NanoERPFNModel
+from .tokenizer import Tokenizer
+from .utils import get_default_device
 
 
 class IdentityPFNModel:

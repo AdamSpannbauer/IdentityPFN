@@ -10,9 +10,9 @@ import pandas as pd
 import schedulefree
 import torch
 
-from model import NanoERPFNLinker, NanoERPFNModel
-from data_loader import SyntheticWorldDataLoader
-from tokenizer import Tokenizer
+from .model import NanoERPFNLinker, NanoERPFNModel
+from .data_loader import SyntheticWorldDataLoader
+from .tokenizer import Tokenizer
 
 from sklearn.metrics import (
     adjusted_rand_score,
@@ -24,7 +24,7 @@ from sklearn.metrics import (
     roc_auc_score,
 )
 
-from utils import get_default_device, set_randomness_seed
+from .utils import get_default_device, set_randomness_seed
 
 set_randomness_seed(0)
 

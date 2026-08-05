@@ -6,6 +6,8 @@ import numpy as np
 import pandas as pd
 import torch
 
+from .paths import repository_path
+
 TextBackend = Literal["fasttext", "sentence_transformer"]
 
 
@@ -13,7 +15,7 @@ class Tokenizer:
     def __init__(
         self,
         text_backend: TextBackend,
-        fasttext_path: str | Path = "cc.en.300.bin",
+        fasttext_path: str | Path = repository_path("cc.en.300.bin"),
         sentence_transformer_name: str = "sentence-transformers/all-MiniLM-L6-v2",
         identifier_backend: TextBackend | None = None,
         normalize_identifiers: bool = False,
@@ -244,7 +246,7 @@ class Tokenizer:
 
 
 if __name__ == "__main__":
-    from data_loader import SyntheticWorldDataLoader
+    from .data_loader import SyntheticWorldDataLoader
 
     eg_prior = SyntheticWorldDataLoader(num_steps=1, batch_size=1)
     tokenizer = Tokenizer(text_backend="fasttext")

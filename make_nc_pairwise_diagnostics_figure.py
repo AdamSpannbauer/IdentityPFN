@@ -13,13 +13,13 @@ import numpy as np
 import pandas as pd
 from sklearn.metrics import average_precision_score
 
-from model import NanoERPFNLinker
+from identitypfn.model import NanoERPFNLinker
 from run_field_evidence_diagnostics import (
     load_model_bundle,
     pair_indices_and_targets,
     prepare_benchmark_tasks,
 )
-from utils import get_default_device
+from identitypfn.utils import get_default_device
 
 
 CHECKPOINT_PATH = Path(

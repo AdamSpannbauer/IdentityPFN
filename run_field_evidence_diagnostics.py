@@ -8,9 +8,9 @@ import torch
 import duckdb
 from sklearn.metrics import average_precision_score
 
-from model import NanoERPFNLinker, NanoERPFNModel
-from tokenizer import Tokenizer
-from utils import get_default_device
+from identitypfn.model import NanoERPFNLinker, NanoERPFNModel
+from identitypfn.tokenizer import Tokenizer
+from identitypfn.utils import get_default_device
 
 
 DEFAULT_MODELS = [
