@@ -13,7 +13,7 @@ import torch
 
 from identitypfn.data_loader import SyntheticWorldDataLoader
 from identitypfn.model import NanoERPFNLinker, NanoERPFNModel
-from identitypfn.dgp.person_data_generation import ObservationConfig, generate_world
+from identitypfn.dgp.people.simple import ObservationConfig, generate_world
 from identitypfn.tokenizer import Tokenizer
 from identitypfn.train import eval_frame, load_benchmarks
 from identitypfn.utils import get_default_device, set_randomness_seed

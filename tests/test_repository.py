@@ -7,7 +7,7 @@ import pandas as pd
 import torch
 
 from identitypfn import load_model, nearest_neighbors, pair_review_table, top_pairs
-from identitypfn.dgp.person_wag_dgp_prototype import generate_worlds
+from identitypfn.dgp.people.wag import generate_worlds
 from identitypfn.train import load_benchmarks
 
 

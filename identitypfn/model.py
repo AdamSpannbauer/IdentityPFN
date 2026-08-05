@@ -530,7 +530,7 @@ class NanoERPFNLinker:
 
 
 if __name__ == "__main__":
-    from .dgp.person_data_generation import generate_world
+    from .dgp.people.simple import generate_world
     from .tokenizer import Tokenizer
 
     world = generate_world(n_records=20, n_fields=4, seed=0)

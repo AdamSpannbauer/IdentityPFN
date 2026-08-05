@@ -1,5 +1,5 @@
-from .dgp.person_data_generation import generate_worlds as generate_person_worlds
-from .dgp.person_wag_dgp_prototype import generate_worlds as generate_wag_worlds
+from .dgp.people.simple import generate_worlds as generate_person_worlds
+from .dgp.people.wag import generate_worlds as generate_wag_worlds
 
 import numpy as np
 
