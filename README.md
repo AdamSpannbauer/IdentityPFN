@@ -1,5 +1,9 @@
 # IdentityPFN
 
+<p align="center">
+  <img src="docs/figs/paradigm.png" alt="IdentityPFN zero-shot entity resolution workflow" width="70%">
+</p>
+
 IdentityPFN is an open-source toolkit for zero-shot entity resolution: load a
 frozen checkpoint, score duplicate likelihoods across records, and inspect the
 highest-confidence links without target-domain labels or benchmark-specific
@@ -34,9 +38,12 @@ pair_review_table(scores, records, k=10)
 
 ## How it works
 
-<!-- TODO: add rendered architecture overview here, e.g. docs/identitypfn_overview.png -->
+<p align="center">
+  <img src="docs/figs/arch.png" alt="IdentityPFN architecture overview" width="100%">
+</p>
 
 At a high level:
+<img src="docs/figs/dgp_three_panel.png" alt="Synthetic identity world generation" width="40%">
 
 - Synthetic identity worlds teach the model reusable priors over names,
   identifiers, contact fields, missingness, corruption, and cross-field
