@@ -7,6 +7,7 @@ from .inference import (
 )
 from .field_types import infer_field_type, infer_field_types
 from .utils import get_default_device
+from .linkage import score_linkage
 
 __all__ = [
     "IdentityPFNModel",
@@ -17,4 +18,5 @@ __all__ = [
     "pair_review_table",
     "top_pairs",
     "get_default_device",
+    "score_linkage",
 ]

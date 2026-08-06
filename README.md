@@ -28,13 +28,39 @@ The core API is intentionally small:
 ```python
 import identitypfn as idpfn
 
-model = idpfn.load_model("results/model_checkpoints/20260715_195803_seed1337_20005214_best_step1500.pt")
+model = idpfn.load_model(
+    "results/model_checkpoints/20260715_195803_seed1337_20005214_best_step1500.pt"
+)
 scores = model.predict_proba(records, field_types="infer")
 
 idpfn.top_pairs(scores, k=10)
 idpfn.nearest_neighbors(scores, k=3)
 idpfn.pair_review_table(scores, records, k=10)
 ```
+
+For two-table record linkage\*, align the columns and return only cross-table
+pairs:
+
+```python
+pairs = idpfn.score_linkage(
+    model,
+    left_customers,
+    right_customers,
+    columns={
+        "name": ("full_name", "customer_name"),
+        "email": ("email", "email_address"),
+        "phone": ("phone", "telephone"),
+    },
+    field_types="infer",
+    k=10,
+)
+```
+
+\***Two-table linkage is currently a convenience wrapper, not a native bipartite
+IdentityPFN architecture.** It stacks aligned columns from two tables, scores
+the combined record set with the same zero-shot adjacency model, and returns
+only cross-table pairs. A native two-table linkage model with table-aware inputs
+and cross-table attention is planned research work.
 
 ## How it works
 
