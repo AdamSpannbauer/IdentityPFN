@@ -83,10 +83,11 @@ def _normalize_column_name(name: object) -> str:
 
 
 def _sample_non_null_strings(series: pd.Series, sample_size: int) -> list[str]:
-    values = series.dropna()
+    values = [str(value).strip() for value in series.dropna()]
+    values = [value for value in values if value]
     if sample_size > 0:
-        values = values.head(sample_size)
-    return [str(value).strip() for value in values if str(value).strip()]
+        return values[:sample_size]
+    return values
 
 
 def _match_fraction(values: list[str], predicate) -> float:

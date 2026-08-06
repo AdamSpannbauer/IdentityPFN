@@ -28,7 +28,7 @@ class IdentityPFNModel:
         self,
         records: pd.DataFrame,
         field_types: Sequence[str] | str = "infer",
-        verbose: bool = True,
+        verbose: bool = False,
     ) -> pd.DataFrame:
         if isinstance(field_types, str) and field_types == "infer":
             field_type_details = infer_field_types(records)

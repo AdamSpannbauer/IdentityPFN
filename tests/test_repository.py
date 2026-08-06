@@ -153,6 +153,10 @@ class RepositorySmokeTests(unittest.TestCase):
             infer_field_type(pd.Series(["a@example.com", "b@example.org"])),
             ("email", "value_pattern"),
         )
+        self.assertEqual(
+            infer_field_type(pd.Series(["", "   ", "a@example.com"], name="contact")),
+            ("email", "value_pattern"),
+        )
 
     def test_public_load_model_scores_records(self):
         checkpoint_path = (
