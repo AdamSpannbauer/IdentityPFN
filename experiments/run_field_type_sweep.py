@@ -7,7 +7,7 @@ import pandas as pd
 from sklearn.metrics import average_precision_score, precision_recall_curve, roc_auc_score
 
 from identitypfn.model import NanoERPFNLinker
-from run_field_evidence_diagnostics import (
+from experiments.run_field_evidence_diagnostics import (
     DEFAULT_MODELS,
     CROSS_SOURCE_BENCHMARKS,
     load_model_bundle,

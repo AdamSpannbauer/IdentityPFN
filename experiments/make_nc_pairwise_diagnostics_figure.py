@@ -14,7 +14,7 @@ import pandas as pd
 from sklearn.metrics import average_precision_score
 
 from identitypfn.model import NanoERPFNLinker
-from run_field_evidence_diagnostics import (
+from experiments.run_field_evidence_diagnostics import (
     load_model_bundle,
     pair_indices_and_targets,
     prepare_benchmark_tasks,
