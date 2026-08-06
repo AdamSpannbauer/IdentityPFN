@@ -3,6 +3,7 @@ from __future__ import annotations
 from collections.abc import Mapping, Sequence
 from typing import Any
 
+import numpy as np
 import pandas as pd
 
 
@@ -51,26 +52,26 @@ def score_linkage(
     scores = model.predict_proba(stacked, field_types=field_types, verbose=verbose)
     cross_scores = scores.loc[left_internal_index, right_internal_index]
 
-    rows = []
     values = cross_scores.to_numpy()
-    for left_position, left_index in enumerate(left_records.index):
-        for right_position, right_index in enumerate(right_records.index):
-            row: dict[str, Any] = {
-                "left_index": left_index,
-                "right_index": right_index,
-                "score": float(values[left_position, right_position]),
-            }
-            for column in canonical_columns:
-                row[f"left_{column}"] = left_records.iloc[left_position][column]
-                row[f"right_{column}"] = right_records.iloc[right_position][column]
-            rows.append(row)
+    top_k = min(k, values.size)
+    flat_values = values.ravel()
+    top_positions = np.argpartition(flat_values, -top_k)[-top_k:]
+    top_positions = top_positions[np.argsort(flat_values[top_positions])[::-1]]
 
-    return (
-        pd.DataFrame(rows)
-        .sort_values("score", ascending=False)
-        .head(k)
-        .reset_index(drop=True)
-    )
+    rows = []
+    for flat_position in top_positions:
+        left_position, right_position = np.unravel_index(flat_position, values.shape)
+        row: dict[str, Any] = {
+            "left_index": left_records.index[left_position],
+            "right_index": right_records.index[right_position],
+            "score": float(values[left_position, right_position]),
+        }
+        for column in canonical_columns:
+            row[f"left_{column}"] = left_records.iloc[left_position][column]
+            row[f"right_{column}"] = right_records.iloc[right_position][column]
+        rows.append(row)
+
+    return pd.DataFrame(rows).reset_index(drop=True)
 
 
 def _resolve_linkage_columns(
@@ -96,6 +97,11 @@ def _resolve_linkage_columns(
         if not resolved:
             raise ValueError("columns must not be empty")
         return resolved
+
+    if isinstance(columns, str):
+        raise TypeError(
+            "columns must be a sequence of column names or a mapping, not a string"
+        )
 
     resolved = []
     for column in columns:

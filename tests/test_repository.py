@@ -216,6 +216,13 @@ class RepositorySmokeTests(unittest.TestCase):
         self.assertEqual(pairs.iloc[0]["left_name"], "Ada Lovelace")
         self.assertEqual(pairs.iloc[0]["right_email"], "ada@example.com")
 
+    def test_public_score_linkage_rejects_string_columns(self):
+        left = pd.DataFrame({"name": ["Ada"]})
+        right = pd.DataFrame({"name": ["Ada"]})
+
+        with self.assertRaisesRegex(TypeError, "not a string"):
+            score_linkage(object(), left, right, columns="name")
+
     def test_public_field_type_inference(self):
         records = pd.DataFrame(
             {
