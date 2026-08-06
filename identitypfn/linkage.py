@@ -54,6 +54,10 @@ def score_linkage(
 
     values = cross_scores.to_numpy()
     top_k = min(k, values.size)
+    output_columns = _linkage_output_columns(canonical_columns)
+    if top_k == 0:
+        return pd.DataFrame(columns=output_columns)
+
     flat_values = values.ravel()
     top_positions = np.argpartition(flat_values, -top_k)[-top_k:]
     top_positions = top_positions[np.argsort(flat_values[top_positions])[::-1]]
@@ -71,7 +75,14 @@ def score_linkage(
             row[f"right_{column}"] = right_records.iloc[right_position][column]
         rows.append(row)
 
-    return pd.DataFrame(rows).reset_index(drop=True)
+    return pd.DataFrame(rows, columns=output_columns).reset_index(drop=True)
+
+
+def _linkage_output_columns(canonical_columns: Sequence[str]) -> list[str]:
+    output_columns = ["left_index", "right_index", "score"]
+    for column in canonical_columns:
+        output_columns.extend([f"left_{column}", f"right_{column}"])
+    return output_columns
 
 
 def _resolve_linkage_columns(

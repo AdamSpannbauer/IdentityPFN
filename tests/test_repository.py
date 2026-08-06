@@ -223,6 +223,22 @@ class RepositorySmokeTests(unittest.TestCase):
         with self.assertRaisesRegex(TypeError, "not a string"):
             score_linkage(object(), left, right, columns="name")
 
+    def test_public_score_linkage_handles_empty_inputs(self):
+        class FakeModel:
+            def predict_proba(self, records, field_types="infer", verbose=False):
+                return pd.DataFrame(index=records.index, columns=records.index)
+
+        left = pd.DataFrame({"name": []})
+        right = pd.DataFrame({"name": ["Ada"]}, index=["r0"])
+
+        pairs = score_linkage(FakeModel(), left, right, k=1)
+
+        self.assertTrue(pairs.empty)
+        self.assertEqual(
+            list(pairs.columns),
+            ["left_index", "right_index", "score", "left_name", "right_name"],
+        )
+
     def test_public_field_type_inference(self):
         records = pd.DataFrame(
             {
