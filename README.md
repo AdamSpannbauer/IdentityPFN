@@ -26,14 +26,14 @@ heatmap, retrieves nearest neighbors, and builds a side-by-side review table.
 The core API is intentionally small:
 
 ```python
-from identitypfn import load_model, nearest_neighbors, pair_review_table, top_pairs
+import identitypfn as idpfn
 
-model = load_model("results/model_checkpoints/20260715_195803_seed1337_20005214_best_step1500.pt")
-scores = model.predict_proba(records, field_types)
+model = idpfn.load_model("results/model_checkpoints/20260715_195803_seed1337_20005214_best_step1500.pt")
+scores = model.predict_proba(records, field_types="infer")
 
-top_pairs(scores, k=10)
-nearest_neighbors(scores, k=3)
-pair_review_table(scores, records, k=10)
+idpfn.top_pairs(scores, k=10)
+idpfn.nearest_neighbors(scores, k=3)
+idpfn.pair_review_table(scores, records, k=10)
 ```
 
 ## How it works
@@ -81,6 +81,10 @@ The recorded project environment uses Python 3.13 and is locked with
 uv sync --no-dev
 ```
 
+Use `--no-dev` on `uv run` commands when you want to keep this minimal
+environment unchanged; otherwise `uv run` may sync default dependency groups
+before executing the command.
+
 Ollama, fastText, and competitor baselines are optional:
 
 ```bash
@@ -105,7 +109,7 @@ Run a small synthetic-prior diagnostic without Ollama or external benchmark
 data:
 
 ```bash
-uv run python run_dgp_batch_diagnostics.py \
+uv run --no-dev python run_dgp_batch_diagnostics.py \
   --generator wag \
   --num-batches 2 \
   --batch-size 2 \
@@ -115,7 +119,7 @@ uv run python run_dgp_batch_diagnostics.py \
 Run the repository checks:
 
 ```bash
-uv run python -m unittest discover -s tests
+uv run --no-dev python -m unittest discover -s tests
 ```
 
 The larger `run_dgp_smoke.py` path trains a small model and currently uses the
