@@ -12,6 +12,7 @@ from identitypfn import (
     load_model,
     nearest_neighbors,
     pair_review_table,
+    score_linkage,
     top_pairs,
 )
 from identitypfn.dgp.people.wag import generate_worlds
@@ -119,6 +120,124 @@ class RepositorySmokeTests(unittest.TestCase):
         review = pair_review_table(scores, records, k=1, columns=["name", "email"])
         self.assertIn("left_name", review.columns)
         self.assertEqual(review.iloc[0]["score"], 0.9)
+
+    def test_public_score_linkage_uses_common_columns(self):
+        class FakeModel:
+            def predict_proba(self, records, field_types="infer", verbose=False):
+                self.records = records
+                self.field_types = field_types
+                self.verbose = verbose
+                return pd.DataFrame(
+                    [
+                        [1.0, 0.1, 0.8, 0.2],
+                        [0.1, 1.0, 0.3, 0.9],
+                        [0.8, 0.3, 1.0, 0.4],
+                        [0.2, 0.9, 0.4, 1.0],
+                    ],
+                    index=records.index,
+                    columns=records.index,
+                )
+
+        left = pd.DataFrame(
+            [
+                {"name": "Ada Lovelace", "email": "ada@example.com"},
+                {"name": "Grace Hopper", "email": "grace@example.com"},
+            ],
+            index=["l0", "l1"],
+        )
+        right = pd.DataFrame(
+            [
+                {"name": "A. Lovelace", "email": "ada@example.com"},
+                {"name": "G. Hopper", "email": "grace@example.com"},
+            ],
+            index=["r0", "r1"],
+        )
+        model = FakeModel()
+
+        pairs = score_linkage(model, left, right, k=2)
+
+        self.assertEqual(list(model.records.columns), ["name", "email"])
+        self.assertEqual(model.field_types, "infer")
+        self.assertFalse(model.verbose)
+        self.assertEqual(list(pairs["left_index"]), ["l1", "l0"])
+        self.assertEqual(list(pairs["right_index"]), ["r1", "r0"])
+        self.assertIn("left_name", pairs.columns)
+        self.assertIn("right_email", pairs.columns)
+        self.assertTrue((pairs["score"].diff().dropna() <= 0).all())
+
+    def test_public_score_linkage_supports_column_mapping(self):
+        class FakeModel:
+            def predict_proba(self, records, field_types="infer", verbose=False):
+                self.records = records
+                self.field_types = field_types
+                return pd.DataFrame(
+                    [
+                        [1.0, 0.1, 0.2, 0.95],
+                        [0.1, 1.0, 0.7, 0.3],
+                        [0.2, 0.7, 1.0, 0.4],
+                        [0.95, 0.3, 0.4, 1.0],
+                    ],
+                    index=records.index,
+                    columns=records.index,
+                )
+
+        left = pd.DataFrame(
+            [
+                {"full_name": "Ada Lovelace", "email": "ada@example.com"},
+                {"full_name": "Grace Hopper", "email": "grace@example.com"},
+            ],
+            index=["l0", "l1"],
+        )
+        right = pd.DataFrame(
+            [
+                {"customer_name": "G. Hopper", "email_address": "grace@example.com"},
+                {"customer_name": "A. Lovelace", "email_address": "ada@example.com"},
+            ],
+            index=["r0", "r1"],
+        )
+        model = FakeModel()
+
+        pairs = score_linkage(
+            model,
+            left,
+            right,
+            columns={
+                "name": ("full_name", "customer_name"),
+                "email": ("email", "email_address"),
+            },
+            field_types=["text", "email"],
+            k=1,
+        )
+
+        self.assertEqual(list(model.records.columns), ["name", "email"])
+        self.assertEqual(model.field_types, ["text", "email"])
+        self.assertEqual(pairs.iloc[0]["left_index"], "l0")
+        self.assertEqual(pairs.iloc[0]["right_index"], "r1")
+        self.assertEqual(pairs.iloc[0]["left_name"], "Ada Lovelace")
+        self.assertEqual(pairs.iloc[0]["right_email"], "ada@example.com")
+
+    def test_public_score_linkage_rejects_string_columns(self):
+        left = pd.DataFrame({"name": ["Ada"]})
+        right = pd.DataFrame({"name": ["Ada"]})
+
+        with self.assertRaisesRegex(TypeError, "not a string"):
+            score_linkage(object(), left, right, columns="name")
+
+    def test_public_score_linkage_handles_empty_inputs(self):
+        class FakeModel:
+            def predict_proba(self, records, field_types="infer", verbose=False):
+                return pd.DataFrame(index=records.index, columns=records.index)
+
+        left = pd.DataFrame({"name": []})
+        right = pd.DataFrame({"name": ["Ada"]}, index=["r0"])
+
+        pairs = score_linkage(FakeModel(), left, right, k=1)
+
+        self.assertTrue(pairs.empty)
+        self.assertEqual(
+            list(pairs.columns),
+            ["left_index", "right_index", "score", "left_name", "right_name"],
+        )
 
     def test_public_field_type_inference(self):
         records = pd.DataFrame(
