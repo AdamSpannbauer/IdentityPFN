@@ -6,7 +6,14 @@ from pathlib import Path
 import pandas as pd
 import torch
 
-from identitypfn import load_model, nearest_neighbors, pair_review_table, top_pairs
+from identitypfn import (
+    infer_field_type,
+    infer_field_types,
+    load_model,
+    nearest_neighbors,
+    pair_review_table,
+    top_pairs,
+)
 from identitypfn.dgp.people.wag import generate_worlds
 from identitypfn.train import load_benchmarks
 
@@ -113,6 +120,44 @@ class RepositorySmokeTests(unittest.TestCase):
         self.assertIn("left_name", review.columns)
         self.assertEqual(review.iloc[0]["score"], 0.9)
 
+    def test_public_field_type_inference(self):
+        records = pd.DataFrame(
+            {
+                "email": ["ada@example.com", "grace@example.org"],
+                "contact_no": ["+1 (865) 555-5555", "865-555-5556"],
+                "sku": ["ABC-123", "XYZ-999"],
+                "created_at": pd.to_datetime(["2026-01-01", "2026-01-02"]),
+                "amount": [10.5, 22.0],
+                "active": [True, False],
+                "notes": ["met at event", "prefers email"],
+            }
+        )
+
+        self.assertEqual(
+            infer_field_types(records),
+            [
+                ("email", "column_name"),
+                ("phone", "value_pattern"),
+                ("identifier", "column_name"),
+                ("date", "dtype"),
+                ("numeric", "dtype"),
+                ("categorical", "dtype"),
+                ("text", "fallback"),
+            ],
+        )
+        self.assertEqual(
+            infer_field_type(pd.Series(["a@example.com", "not email"])),
+            ("text", "fallback"),
+        )
+        self.assertEqual(
+            infer_field_type(pd.Series(["a@example.com", "b@example.org"])),
+            ("email", "value_pattern"),
+        )
+        self.assertEqual(
+            infer_field_type(pd.Series(["", "   ", "a@example.com"], name="contact")),
+            ("email", "value_pattern"),
+        )
+
     def test_public_load_model_scores_records(self):
         checkpoint_path = (
             REPOSITORY_ROOT
@@ -147,6 +192,40 @@ class RepositorySmokeTests(unittest.TestCase):
         self.assertEqual(scores.shape, (3, 3))
         self.assertEqual(list(scores.index), list(records.index))
         self.assertTrue(((scores >= 0.0) & (scores <= 1.0)).to_numpy().all())
+
+    def test_public_load_model_infers_field_types(self):
+        checkpoint_path = (
+            REPOSITORY_ROOT
+            / "results"
+            / "model_checkpoints"
+            / "20260715_195803_seed1337_20005214_best_step1500.pt"
+        )
+        records = pd.DataFrame(
+            [
+                {
+                    "first_name": "Ada",
+                    "last_name": "Lovelace",
+                    "email": "ada@example.com",
+                },
+                {
+                    "first_name": "A.",
+                    "last_name": "Lovelace",
+                    "email": "ada@example.com",
+                },
+                {
+                    "first_name": "Grace",
+                    "last_name": "Hopper",
+                    "email": "grace@example.com",
+                },
+            ],
+            index=["r0", "r1", "r2"],
+        )
+
+        linker = load_model(checkpoint_path, device="cpu")
+        scores = linker.predict_proba(records, field_types="infer", verbose=False)
+
+        self.assertEqual(scores.shape, (3, 3))
+        self.assertEqual(list(scores.index), list(records.index))
 
 
 if __name__ == "__main__":
