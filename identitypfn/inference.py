@@ -7,6 +7,7 @@ import numpy as np
 import pandas as pd
 import torch
 
+from .field_types import infer_field_types
 from .model import NanoERPFNModel
 from .tokenizer import Tokenizer
 from .utils import get_default_device
@@ -26,8 +27,32 @@ class IdentityPFNModel:
     def predict_proba(
         self,
         records: pd.DataFrame,
-        field_types: Sequence[str],
+        field_types: Sequence[str] | str = "infer",
+        verbose: bool = True,
     ) -> pd.DataFrame:
+        if isinstance(field_types, str) and field_types == "infer":
+            field_type_details = infer_field_types(records)
+            if verbose:
+                print(
+                    pd.DataFrame(
+                        {
+                            "column": records.columns,
+                            "field_type": [
+                                field_type
+                                for field_type, _reason in field_type_details
+                            ],
+                            "reason": [
+                                reason for _field_type, reason in field_type_details
+                            ],
+                        }
+                    ).to_string(index=False)
+                )
+            field_types = [
+                field_type for field_type, _reason in field_type_details
+            ]
+        elif isinstance(field_types, str):
+            raise ValueError("field_types must be a sequence of field types or 'infer'")
+
         if len(field_types) != records.shape[1]:
             raise ValueError("field_types must have one entry per records column")
 
