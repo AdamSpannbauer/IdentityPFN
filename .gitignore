@@ -1,5 +1,19 @@
 .DS_Store
 
+# Personal work and local-only resources
+local/
+experiments/
+competitor_repos/
+benchmark_data/
+results/
+
+# Local model/data downloads and generated outputs
+cc.en.300.bin
+benchmark_data/converted/
+results/baselines/*.jsonl
+results/benchmark_runs/*.partial.csv
+results/benchmark_runs/*.profile.csv
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[codz]
@@ -158,13 +172,6 @@ venv/
 ENV/
 env.bak/
 venv.bak/
-
-# Local model/data downloads and generated outputs
-cc.en.300.bin
-benchmark_data/converted/
-results/baselines/*.jsonl
-results/benchmark_runs/*.partial.csv
-results/benchmark_runs/*.profile.csv
 
 # Spyder project settings
 .spyderproject
