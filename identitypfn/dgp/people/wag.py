@@ -1,5 +1,4 @@
 from dataclasses import dataclass, field, replace
-import time
 from typing import Literal
 
 from faker import Faker
@@ -12,6 +11,7 @@ from .simple import (
     ObservationConfig,
     _temporary_global_seed,
     get_character_augmenters,
+    load_nickname_aliases,
     load_us_locations,
 )
 from .wag_rules.person_account_bio import (
@@ -1181,10 +1181,21 @@ def observe_projected_value(
     config: ObservationConfig,
     rng: np.random.Generator,
 ):
+    if pd.isna(value):
+        return np.nan
     if rng.random() < config.missing_rate:
         return np.nan
 
     observed = value
+    if (
+        config.nickname_rate > 0
+        and node_type in {FIRST_NAME, MIDDLE_NAME}
+        and rng.random() < config.nickname_rate
+    ):
+        aliases = load_nickname_aliases().get(str(observed).lower(), ())
+        if aliases:
+            observed = aliases[rng.integers(len(aliases))].title()
+
     if (
         node_type.primitive_type in {"text", "identifier"}
         and rng.random() < config.corruption_rate
@@ -1213,6 +1224,80 @@ def observe_projected_records(
             for node_type in world_graph.projected_node_types
         ]
         records.append(record)
+    return pd.DataFrame(records, columns=clean_records.columns)
+
+
+def projected_values_with_propagated_corruption(
+    entity_graph: RealizedEntityGraph,
+    world_graph: WorldGraph,
+    config: ObservationConfig,
+    rng: np.random.Generator,
+) -> list[object]:
+    realized_nodes = dict(entity_graph.nodes)
+    changed_node_types: set[NodeType] = set()
+    projected_node_types = set(world_graph.projected_node_types)
+
+    for node_type in topological_node_order(world_graph):
+        if node_type == ENTITY:
+            continue
+
+        rule = entity_graph.rules[node_type]
+        changed_input_types = changed_node_types.intersection(rule.input_node_types)
+        if changed_input_types and rng.random() < config.prop_corruption_rate:
+            if any(
+                pd.isna(realized_nodes[input_type].value)
+                for input_type in changed_input_types
+            ):
+                propagated_node = RealizedNode(node_type, np.nan)
+            else:
+                input_nodes = get_rule_input_nodes(rule, realized_nodes, rng)
+                propagated_node = rule.derive(input_nodes, rng)
+            if propagated_node.value != realized_nodes[node_type].value:
+                changed_node_types.add(node_type)
+            realized_nodes[node_type] = propagated_node
+
+        if node_type in projected_node_types:
+            original_value = realized_nodes[node_type].value
+            observed_value = observe_projected_value(
+                original_value,
+                node_type,
+                config,
+                rng,
+            )
+            if pd.isna(observed_value) or observed_value != original_value:
+                changed_node_types.add(node_type)
+            realized_nodes[node_type] = RealizedNode(node_type, observed_value)
+
+    return [
+        realized_nodes[node_type].value
+        for node_type in world_graph.projected_node_types
+    ]
+
+
+def generate_projected_records(
+    entity_graphs: list[RealizedEntityGraph],
+    entity_ids: np.ndarray,
+    world_graph: WorldGraph,
+    config: ObservationConfig | None,
+    rng: np.random.Generator,
+) -> pd.DataFrame:
+    clean_records = generate_clean_projected_records(
+        entity_graphs,
+        entity_ids,
+        world_graph,
+    )
+    if config is None or config.prop_corruption_rate == 0:
+        return observe_projected_records(clean_records, world_graph, config, rng)
+
+    records = [
+        projected_values_with_propagated_corruption(
+            entity_graphs[entity_id],
+            world_graph,
+            config,
+            rng,
+        )
+        for entity_id in entity_ids
+    ]
     return pd.DataFrame(records, columns=clean_records.columns)
 
 
@@ -1277,11 +1362,12 @@ def generate_graph_world_details(
         hard_negative_contract_weights=hard_negative_contract_weights,
         rng=rng,
     )
-    clean_records = generate_clean_projected_records(
-        entity_graphs, entity_ids, world_graph
-    )
-    records = observe_projected_records(
-        clean_records, world_graph, observation_config, rng
+    records = generate_projected_records(
+        entity_graphs,
+        entity_ids,
+        world_graph,
+        observation_config,
+        rng,
     )
 
     order = rng.permutation(n_records)
@@ -1316,6 +1402,7 @@ def generate_worlds(
     missing_rate: list[float] = [0.0, 0.1, 0.2],
     nickname_rate: list[float] = [0.0, 0.1, 0.2],
     corruption_rate: list[float] = [0.0, 0.1, 0.2],
+    prop_corruption_rate: list[float] = [0.0, 0.25, 0.5],
     allow_ollama: bool = True,
     ollama_model: OllamaModel | str = "qwen2.5:7b",
     hard_negative_rate: float = 0.0,
@@ -1335,6 +1422,7 @@ def generate_worlds(
                 missing_rate=float(rng.choice(missing_rate)),
                 nickname_rate=float(rng.choice(nickname_rate)),
                 corruption_rate=float(rng.choice(corruption_rate)),
+                prop_corruption_rate=float(rng.choice(prop_corruption_rate)),
             ),
             allow_ollama=allow_ollama,
             ollama_model=ollama_model,
@@ -2011,90 +2099,18 @@ def sample_person_world_graph(
 
 
 if __name__ == "__main__":
-    print("Person universe")
-    print(f"Node types: {len(PERSON_UNIVERSE.node_types)}")
-    print(f"Edges: {len(PERSON_UNIVERSE.edges)}")
-    print(f"Rule sets: {len(PERSON_UNIVERSE.rule_sets)}")
-    print(
-        "Rules per node:",
-        {
-            node_type.name: len(rule_set.rules)
-            for node_type, rule_set in PERSON_UNIVERSE.rule_sets.items()
-        },
-    )
-
-    for node_type in (LOCATION, CITY, EMAIL_ADDRESS):
-        print(f"\n{node_type.name}")
-        print(
-            "Parents:",
-            [
-                edge.source.name
-                for edge in PERSON_UNIVERSE.edges
-                if edge.target == node_type
-            ],
-        )
-        print(
-            "Rules:",
-            [rule.name for rule in PERSON_UNIVERSE.rule_sets[node_type].rules],
-        )
-
-    rng = np.random.default_rng(0)
-    world_graph = sample_person_world_graph(n_fields=6, rng=rng, allow_ollama=False)
-    print("\nSampled world graph")
-    print_world_graph_summary(world_graph)
-
-    realized_entity_graph = realize_entity_graph(world_graph, rng, allow_ollama=False)
-    print("\nRealized entity graph")
-    print(
-        "Rules:",
-        {
-            node_type.name: rule.name
-            for node_type, rule in realized_entity_graph.rules.items()
-        },
-    )
-    print(
-        "Projected values:",
-        {
-            node_type.name: realized_entity_graph.nodes[node_type].value
-            for node_type in world_graph.projected_node_types
-        },
-    )
-
-    start = time.perf_counter()
-    world = generate_wag_world(
-        n_records=8,
-        p_match=0.2,
-        n_fields=4,
-        observation_config=ObservationConfig(
-            missing_rate=0.1, nickname_rate=0.0, corruption_rate=0.2
-        ),
-        allow_ollama=False,
-        seed=1,
-    )
-    elapsed = time.perf_counter() - start
-    print("\nGenerated WAG world")
-    print(f"Generation time: {elapsed:.2f}s")
-    print_world_records(world)
-
-    inspect_graph_world()
-
-    print("\nOllama model comparison")
-    comparison_kwargs = dict(
-        n_records=5,
+    generated = generate_graph_world_details(
+        n_records=10,
         p_match=0.2,
         n_fields=5,
-        observation_config=None,
-        allow_ollama=True,
-        seed=2,
+        observation_config=ObservationConfig(
+            missing_rate=0.0,
+            nickname_rate=1.0,
+            corruption_rate=0.0,
+            prop_corruption_rate=0.5,
+        ),
+        allow_ollama=False,
     )
-    for model in ("qwen2.5:7b", "llama3.2:1b"):
-        print(f"\nModel: {model}")
-        start = time.perf_counter()
-        try:
-            world = generate_wag_world(ollama_model=model, **comparison_kwargs)
-            elapsed = time.perf_counter() - start
-            print(f"Generation time: {elapsed:.2f}s")
-            print_world_records(world)
-        except Exception as error:
-            elapsed = time.perf_counter() - start
-            print(f"Generation failed after {elapsed:.2f}s: {error!r}")
+    records = generated.world.records.copy()
+    records.insert(0, "entity_id", generated.world.entity_ids)
+    print(records.sort_values("entity_id").to_string(index=False))

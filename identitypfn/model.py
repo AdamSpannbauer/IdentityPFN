@@ -78,7 +78,9 @@ class NanoERPFNModel(nn.Module):
         else:
             raise ValueError(f"Unknown adjacency decoder: {adjacency_decoder}")
 
-    def forward(self, tokenized_cells: dict) -> torch.Tensor:
+    def forward(
+        self, tokenized_cells: dict, return_extras: bool = False
+    ) -> torch.Tensor | tuple[torch.Tensor, dict[str, torch.Tensor]]:
         # from here on T=Tables, R=Records, C=Columns, E=embedding size
         # converts cell values to embeddings, so (T,R,C) -> (T,R,C,E)
 
@@ -95,7 +97,10 @@ class NanoERPFNModel(nn.Module):
             cell_embeddings = block(cell_embeddings)
 
         record_embeddings = self.record_representer(cell_embeddings)
-        return self.adjacency_decoder(record_embeddings)
+        logits = self.adjacency_decoder(record_embeddings)
+        if return_extras:
+            return logits, {"record_embeddings": record_embeddings}
+        return logits
 
 
 class FeatureEncoder(nn.Module):
@@ -505,6 +510,21 @@ class NanoERPFNLinker:
         with torch.no_grad():
             logits = self.model(tokenized_cells).squeeze(0)
         return logits.cpu().numpy()
+
+    def decision_function_with_extras(
+        self, X: pd.DataFrame, field_types: list[str]
+    ) -> tuple[np.ndarray, dict[str, np.ndarray]]:
+        """Returns raw pairwise adjacency logits and model diagnostic tensors."""
+        tokenized_cells = self.tokenizer([X], [field_types])
+        tokenized_cells = self._move_to_device(tokenized_cells)
+
+        self.model.eval()
+        with torch.no_grad():
+            logits, extras = self.model(tokenized_cells, return_extras=True)
+        return (
+            logits.squeeze(0).cpu().numpy(),
+            {key: value.squeeze(0).cpu().numpy() for key, value in extras.items()},
+        )
 
     def fit(self, X: pd.DataFrame, field_types: list[str]):
         """Links all records in X and stores pairwise and cluster outputs."""

@@ -53,6 +53,7 @@ class ObservationConfig:
     missing_rate: float = 0.1
     nickname_rate: float = 0.1
     corruption_rate: float = 0.2
+    prop_corruption_rate: float = 0.0
 
 
 PERSON_FIELD_FAMILIES = (

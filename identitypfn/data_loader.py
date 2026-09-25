@@ -31,6 +31,7 @@ class SyntheticWorldDataLoader(DataLoader):
         missing_rate=None,
         nickname_rate=None,
         corruption_rate=None,
+        prop_corruption_rate=None,
         hard_negative_rate=0.0,
         hard_negative_contract_weights=None,
     ):
@@ -43,6 +44,7 @@ class SyntheticWorldDataLoader(DataLoader):
         self.missing_rate = missing_rate
         self.nickname_rate = nickname_rate
         self.corruption_rate = corruption_rate
+        self.prop_corruption_rate = prop_corruption_rate
         self.hard_negative_rate = hard_negative_rate
         self.hard_negative_contract_weights = hard_negative_contract_weights
 
@@ -80,6 +82,10 @@ class SyntheticWorldDataLoader(DataLoader):
                     generator_kwargs["nickname_rate"] = self.nickname_rate
                 if self.corruption_rate is not None:
                     generator_kwargs["corruption_rate"] = self.corruption_rate
+                if self.prop_corruption_rate is not None:
+                    generator_kwargs["prop_corruption_rate"] = (
+                        self.prop_corruption_rate
+                    )
             worlds = generate_worlds(
                 n_worlds=self.batch_size,
                 n_records=[n_records],
