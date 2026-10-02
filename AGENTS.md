@@ -9,7 +9,7 @@
 
 - Before implementing, state assumptions, plausible interpretations, tradeoffs, and any simpler approach. Push back on risky, ineffective, or needlessly complex proposals; ask when uncertainty would materially affect the result.
 - Work from intended behavior to concrete changes. A plan should identify exact files, scope, deferred work, relevant inputs and outputs, control flow, compatibility, dependencies, and verification, with detail proportional to the task.
-- Do not edit files until the user explicitly approves the discussed plan after you restate the exact files and changes and ask whether to edit them. Agreement with a direction, general requests to continue, and discussion are not edit approval.
+- Before **every file edit**, name the exact files and changes, then ask: **"Do you approve these edits?"** Edit only when the user answers **"yes," "go," or "do it"** to that specific question. Agreement with a general plan or direction—even using those words—is not edit approval unless it directly answers the explicit question about the named edits. Approval covers only those edits; ignored and remote files count.
 - Approval covers only the stated scope. Ask again if it changes. Commands that modify files indirectly require the same approval.
 - Identify the repository and exact Git operation before staging, committing, pushing, resetting, or removing tracked files. Do not perform those operations unless explicitly included in the approved scope; destructive Git operations require explicit authorization for that operation.
 
@@ -21,6 +21,7 @@
 
 ## Verify and preserve progress
 
+- Prefer `uv run` for repository Python commands. Include `--no-dev` when using the minimal environment, as described in `README.md`.
 - Use relevant existing tests, linters, builds, or inspections without inventing a heavy workflow. State what was checked and any limits on verification.
 - Before a long run, ensure meaningful progress is saved in logs, outputs, or checkpoints. Prefer resume or skip-existing behavior; if progress cannot be preserved, explain the risk and get approval before running.
 - Request needed permissions. Do not switch tools, runtimes, environments, caches, or methods merely to avoid an escalation request; explain and ask before changing a requested approach.
