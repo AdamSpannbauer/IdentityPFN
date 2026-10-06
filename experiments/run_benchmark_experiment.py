@@ -38,7 +38,10 @@ class ExperimentConfig:
     grad_clip_norm: float = 1.0
     pos_weight: float | None = None
     progress_every: int = 25
-    train_generator: Literal["person", "wag"] = "person"
+    train_generator: Literal["person", "wag", "id_prior"] = "person"
+    revelio_root: str | None = None
+    id_prior_allow_ollama: bool = False
+    id_prior_ollama_model: str = "llama3.2:1b"
     wag_allow_ollama: bool = False
     wag_ollama_model: str = "qwen2.5:7b"
     wag_missing_rate: list[float] | None = None
@@ -235,8 +238,17 @@ def run_experiment(config: ExperimentConfig) -> Path:
         batch_size=config.batch_size,
         seed=config.random_seed,
         generator=config.train_generator,
-        allow_ollama=config.wag_allow_ollama,
-        ollama_model=config.wag_ollama_model,
+        allow_ollama=(
+            config.id_prior_allow_ollama
+            if config.train_generator == "id_prior"
+            else config.wag_allow_ollama
+        ),
+        ollama_model=(
+            config.id_prior_ollama_model
+            if config.train_generator == "id_prior"
+            else config.wag_ollama_model
+        ),
+        revelio_root=config.revelio_root,
         missing_rate=config.wag_missing_rate,
         nickname_rate=config.wag_nickname_rate,
         corruption_rate=config.wag_corruption_rate,
@@ -373,9 +385,12 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--progress-every", type=int, default=25)
     parser.add_argument(
         "--train-generator",
-        choices=["person", "wag"],
+        choices=["person", "wag", "id_prior"],
         default="person",
     )
+    parser.add_argument("--revelio-root", type=str)
+    parser.add_argument("--id-prior-allow-ollama", action="store_true")
+    parser.add_argument("--id-prior-ollama-model", default="llama3.2:1b")
     parser.add_argument("--wag-allow-ollama", action="store_true")
     parser.add_argument("--wag-ollama-model", default="qwen2.5:7b")
     parser.add_argument(
@@ -472,6 +487,9 @@ def config_from_args(args: argparse.Namespace) -> ExperimentConfig:
         pos_weight=args.pos_weight,
         progress_every=args.progress_every,
         train_generator=args.train_generator,
+        revelio_root=args.revelio_root,
+        id_prior_allow_ollama=args.id_prior_allow_ollama,
+        id_prior_ollama_model=args.id_prior_ollama_model,
         wag_allow_ollama=args.wag_allow_ollama,
         wag_ollama_model=args.wag_ollama_model,
         wag_missing_rate=args.wag_missing_rate,

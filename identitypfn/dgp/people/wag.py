@@ -44,7 +44,7 @@ from .wag_rules.person_username import (
     make_username_from_name_company,
     make_username_from_name_dob,
 )
-from ..world import World, sample_entity_ids
+from ..world import World, sample_uniform_slot_entity_ids
 
 PrimitiveType = Literal[
     "text", "categorical", "numeric", "date", "identifier", "email", "phone"
@@ -1213,6 +1213,7 @@ def observe_projected_records(
     world_graph: WorldGraph,
     config: ObservationConfig | None,
     rng: np.random.Generator,
+    field_observation_configs: dict[NodeType, ObservationConfig] | None = None,
 ) -> pd.DataFrame:
     if config is None:
         return clean_records
@@ -1220,7 +1221,14 @@ def observe_projected_records(
     records = []
     for _, row in clean_records.iterrows():
         record = [
-            observe_projected_value(row[node_type.name], node_type, config, rng)
+            observe_projected_value(
+                row[node_type.name],
+                node_type,
+                field_observation_configs.get(node_type, config)
+                if field_observation_configs is not None
+                else config,
+                rng,
+            )
             for node_type in world_graph.projected_node_types
         ]
         records.append(record)
@@ -1232,6 +1240,7 @@ def projected_values_with_propagated_corruption(
     world_graph: WorldGraph,
     config: ObservationConfig,
     rng: np.random.Generator,
+    field_observation_configs: dict[NodeType, ObservationConfig] | None = None,
 ) -> list[object]:
     realized_nodes = dict(entity_graph.nodes)
     changed_node_types: set[NodeType] = set()
@@ -1261,7 +1270,9 @@ def projected_values_with_propagated_corruption(
             observed_value = observe_projected_value(
                 original_value,
                 node_type,
-                config,
+                field_observation_configs.get(node_type, config)
+                if field_observation_configs is not None
+                else config,
                 rng,
             )
             if pd.isna(observed_value) or observed_value != original_value:
@@ -1280,6 +1291,7 @@ def generate_projected_records(
     world_graph: WorldGraph,
     config: ObservationConfig | None,
     rng: np.random.Generator,
+    field_observation_configs: dict[NodeType, ObservationConfig] | None = None,
 ) -> pd.DataFrame:
     clean_records = generate_clean_projected_records(
         entity_graphs,
@@ -1287,7 +1299,9 @@ def generate_projected_records(
         world_graph,
     )
     if config is None or config.prop_corruption_rate == 0:
-        return observe_projected_records(clean_records, world_graph, config, rng)
+        return observe_projected_records(
+            clean_records, world_graph, config, rng, field_observation_configs
+        )
 
     records = [
         projected_values_with_propagated_corruption(
@@ -1295,6 +1309,7 @@ def generate_projected_records(
             world_graph,
             config,
             rng,
+            field_observation_configs,
         )
         for entity_id in entity_ids
     ]
@@ -1312,6 +1327,7 @@ def generate_wag_world(
     hard_negative_rate: float = 0.0,
     hard_negative_contract_weights: dict[str, float] | None = None,
     seed: int | None = None,
+    field_observation_configs: tuple[ObservationConfig, ...] | None = None,
 ) -> World:
     return generate_graph_world_details(
         n_records=n_records,
@@ -1319,6 +1335,7 @@ def generate_wag_world(
         n_fields=n_fields,
         projection_temperature=projection_temperature,
         observation_config=observation_config,
+        field_observation_configs=field_observation_configs,
         allow_ollama=allow_ollama,
         ollama_model=ollama_model,
         hard_negative_rate=hard_negative_rate,
@@ -1338,6 +1355,7 @@ def generate_graph_world_details(
     hard_negative_rate: float = 0.0,
     hard_negative_contract_weights: dict[str, float] | None = None,
     seed: int | None = None,
+    field_observation_configs: tuple[ObservationConfig, ...] | None = None,
 ) -> GeneratedGraphWorld:
     rng = np.random.default_rng(seed)
     world_graph = sample_person_world_graph(
@@ -1347,7 +1365,12 @@ def generate_graph_world_details(
         ollama_model=ollama_model,
         allow_ollama=allow_ollama,
     )
-    entity_ids = sample_entity_ids(n_records, p_match, rng)
+    projected_field_configs = (
+        dict(zip(world_graph.projected_node_types, field_observation_configs))
+        if field_observation_configs is not None
+        else None
+    )
+    entity_ids = sample_uniform_slot_entity_ids(n_records, p_match, rng)
     entity_graphs = [
         realize_entity_graph(
             world_graph,
@@ -1368,6 +1391,7 @@ def generate_graph_world_details(
         world_graph,
         observation_config,
         rng,
+        projected_field_configs,
     )
 
     order = rng.permutation(n_records)
@@ -1396,13 +1420,13 @@ generate_world = generate_wag_world
 def generate_worlds(
     n_worlds: int,
     n_records: list[int] = [50, 100, 300],
-    p_match: list[float] = [0.001, 0.005, 0.01, 0.05],
+    p_match: list[float] | None = None,
     n_fields: list[int] = [3, 5, 10],
     projection_temperature: list[float] = [0.7, 1.0, 1.5],
-    missing_rate: list[float] = [0.0, 0.1, 0.2],
-    nickname_rate: list[float] = [0.0, 0.1, 0.2],
-    corruption_rate: list[float] = [0.0, 0.1, 0.2],
-    prop_corruption_rate: list[float] = [0.0, 0.25, 0.5],
+    missing_rate: list[float] | None = None,
+    nickname_rate: list[float] | None = None,
+    corruption_rate: list[float] | None = None,
+    prop_corruption_rate: list[float] | None = None,
     allow_ollama: bool = True,
     ollama_model: OllamaModel | str = "qwen2.5:7b",
     hard_negative_rate: float = 0.0,
@@ -1411,19 +1435,39 @@ def generate_worlds(
     verbose: bool = False,
 ) -> list[World]:
     rng = np.random.default_rng(seed)
+
+    def sample_rate(choices: list[float] | None, upper: float) -> float:
+        return float(rng.uniform(0, upper) if choices is None else rng.choice(choices))
+
     worlds = []
     for _ in range(n_worlds):
+        sampled_n_records = int(rng.choice(n_records))
+        sampled_p_match = (
+            float(10 ** rng.uniform(-4, -2))
+            if p_match is None
+            else float(rng.choice(p_match))
+        )
+        sampled_n_fields = int(rng.choice(n_fields))
+        sampled_projection_temperature = float(rng.choice(projection_temperature))
+        sampled_prop_corruption_rate = sample_rate(prop_corruption_rate, 0.5)
+        field_observation_configs = tuple(
+            ObservationConfig(
+                missing_rate=sample_rate(missing_rate, 0.2),
+                nickname_rate=sample_rate(nickname_rate, 0.2),
+                corruption_rate=sample_rate(corruption_rate, 0.2),
+                prop_corruption_rate=sampled_prop_corruption_rate,
+            )
+            for _ in range(sampled_n_fields)
+        )
         world = generate_world(
-            n_records=int(rng.choice(n_records)),
-            p_match=float(rng.choice(p_match)),
-            n_fields=int(rng.choice(n_fields)),
-            projection_temperature=float(rng.choice(projection_temperature)),
+            n_records=sampled_n_records,
+            p_match=sampled_p_match,
+            n_fields=sampled_n_fields,
+            projection_temperature=sampled_projection_temperature,
             observation_config=ObservationConfig(
-                missing_rate=float(rng.choice(missing_rate)),
-                nickname_rate=float(rng.choice(nickname_rate)),
-                corruption_rate=float(rng.choice(corruption_rate)),
-                prop_corruption_rate=float(rng.choice(prop_corruption_rate)),
+                prop_corruption_rate=sampled_prop_corruption_rate,
             ),
+            field_observation_configs=field_observation_configs,
             allow_ollama=allow_ollama,
             ollama_model=ollama_model,
             hard_negative_rate=hard_negative_rate,

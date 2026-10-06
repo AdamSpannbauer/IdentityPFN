@@ -1,7 +1,10 @@
 from .dgp.people.simple import generate_worlds as generate_person_worlds
 from .dgp.people.wag import generate_worlds as generate_wag_worlds
+from .dgp.generate_id_prior_task import generate_id_prior_task
+from .dgp.people.sample_revelio import REVELIO_USER_FIELD_TYPES, RevelioSampler
 
 import numpy as np
+from pathlib import Path
 
 from torch.utils.data import DataLoader
 import torch
@@ -34,9 +37,10 @@ class SyntheticWorldDataLoader(DataLoader):
         prop_corruption_rate=None,
         hard_negative_rate=0.0,
         hard_negative_contract_weights=None,
+        revelio_root=None,
     ):
-        if generator not in {"person", "wag"}:
-            raise ValueError("generator must be 'person' or 'wag'")
+        if generator not in {"person", "wag", "id_prior"}:
+            raise ValueError("generator must be 'person', 'wag', or 'id_prior'")
         self.verbose = verbose
         self.generator = generator
         self.allow_ollama = allow_ollama
@@ -47,6 +51,18 @@ class SyntheticWorldDataLoader(DataLoader):
         self.prop_corruption_rate = prop_corruption_rate
         self.hard_negative_rate = hard_negative_rate
         self.hard_negative_contract_weights = hard_negative_contract_weights
+        self.revelio_sampler = None
+        if generator == "id_prior":
+            if revelio_root is None:
+                raise ValueError("revelio_root is required for id_prior")
+            root = Path(revelio_root)
+            self.revelio_sampler = RevelioSampler(
+                individual_user_dir=root / "individual_user",
+                individual_position_dir=root / "individual_position",
+                individual_user_education_dir=root / "individual_user_education",
+                individual_user_skill_dir=root / "individual_user_skill",
+                company_ref_dir=root / "company_ref",
+            )
 
         self.num_steps = num_steps
         self.batch_size = batch_size
@@ -60,40 +76,60 @@ class SyntheticWorldDataLoader(DataLoader):
         for _ in range(self.num_steps):
             world_seed = self.rng.integers(0, 2**32)
 
-            n_records = self.rng.integers(50, 301)
+            if self.generator in {"wag", "id_prior"}:
+                n_records = self.rng.integers(300, 2501)
+            else:
+                n_records = self.rng.integers(50, 301)
             n_fields = self.rng.integers(3, 11)
-            generate_worlds = (
-                generate_wag_worlds
-                if self.generator == "wag"
-                else generate_person_worlds
-            )
-            generator_kwargs = {}
-            if self.generator == "wag":
-                generator_kwargs["ollama_model"] = self.ollama_model
-                generator_kwargs["hard_negative_rate"] = self.hard_negative_rate
-                generator_kwargs["hard_negative_contract_weights"] = (
-                    self.hard_negative_contract_weights
-                )
-                if self.allow_ollama is not None:
-                    generator_kwargs["allow_ollama"] = self.allow_ollama
-                if self.missing_rate is not None:
-                    generator_kwargs["missing_rate"] = self.missing_rate
-                if self.nickname_rate is not None:
-                    generator_kwargs["nickname_rate"] = self.nickname_rate
-                if self.corruption_rate is not None:
-                    generator_kwargs["corruption_rate"] = self.corruption_rate
-                if self.prop_corruption_rate is not None:
-                    generator_kwargs["prop_corruption_rate"] = (
-                        self.prop_corruption_rate
+            if self.generator == "id_prior":
+                world_rng = np.random.default_rng(world_seed)
+                worlds = [
+                    generate_id_prior_task(
+                        n_records=int(n_records),
+                        p_match=float(10 ** world_rng.uniform(-4, -2)),
+                        n_fields=int(n_fields),
+                        sample_entities=self.revelio_sampler.sample_entities,
+                        field_types=REVELIO_USER_FIELD_TYPES,
+                        rng=np.random.default_rng(world_rng.integers(0, 2**32)),
+                        allow_ollama=bool(self.allow_ollama),
+                        ollama_model=self.ollama_model,
+                        country_field="user_country",
                     )
-            worlds = generate_worlds(
-                n_worlds=self.batch_size,
-                n_records=[n_records],
-                n_fields=[n_fields],
-                seed=world_seed,
-                verbose=self.verbose,
-                **generator_kwargs,
-            )
+                    for _ in range(self.batch_size)
+                ]
+            else:
+                generate_worlds = (
+                    generate_wag_worlds
+                    if self.generator == "wag"
+                    else generate_person_worlds
+                )
+                generator_kwargs = {}
+                if self.generator == "wag":
+                    generator_kwargs["ollama_model"] = self.ollama_model
+                    generator_kwargs["hard_negative_rate"] = self.hard_negative_rate
+                    generator_kwargs["hard_negative_contract_weights"] = (
+                        self.hard_negative_contract_weights
+                    )
+                    if self.allow_ollama is not None:
+                        generator_kwargs["allow_ollama"] = self.allow_ollama
+                    if self.missing_rate is not None:
+                        generator_kwargs["missing_rate"] = self.missing_rate
+                    if self.nickname_rate is not None:
+                        generator_kwargs["nickname_rate"] = self.nickname_rate
+                    if self.corruption_rate is not None:
+                        generator_kwargs["corruption_rate"] = self.corruption_rate
+                    if self.prop_corruption_rate is not None:
+                        generator_kwargs["prop_corruption_rate"] = (
+                            self.prop_corruption_rate
+                        )
+                worlds = generate_worlds(
+                    n_worlds=self.batch_size,
+                    n_records=[n_records],
+                    n_fields=[n_fields],
+                    seed=world_seed,
+                    verbose=self.verbose,
+                    **generator_kwargs,
+                )
 
             batch = {
                 "records": [world.records for world in worlds],

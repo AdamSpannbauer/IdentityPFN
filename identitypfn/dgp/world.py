@@ -34,3 +34,18 @@ def sample_entity_ids(
         entity_ids.append(entity)
 
     return np.asarray(entity_ids)
+
+
+def sample_uniform_slot_entity_ids(
+    n_records: int, p_match: float, rng: np.random.Generator
+) -> np.ndarray:
+    """Seed each entity slot once, then assign remaining records uniformly."""
+    pair_denominator = n_records * (n_records - 1)
+    scaled_rate = p_match * pair_denominator
+    n_slots = round(
+        (1 - scaled_rate + np.sqrt((scaled_rate - 1) ** 2 + 4 * pair_denominator))
+        / 2
+    )
+    return np.concatenate(
+        (np.arange(n_slots), rng.integers(n_slots, size=n_records - n_slots))
+    )
