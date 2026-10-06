@@ -1,13 +1,18 @@
 import argparse
+import csv
 import hashlib
 import json
+import os
+import random
 import time
+from copy import deepcopy
 from dataclasses import asdict, dataclass, field
 from datetime import datetime
 from pathlib import Path
 from typing import Literal
 
 import pandas as pd
+import numpy as np
 import schedulefree
 import torch
 
@@ -91,10 +96,12 @@ class ExperimentConfig:
     save_models: bool = False
     save_best_model: bool = True
     save_last_model: bool = True
+    resume_checkpoint: Path | None = None
 
 
 def build_run_config(config: ExperimentConfig) -> dict:
     run_config = asdict(config)
+    run_config.pop("resume_checkpoint")
     run_config["results_directory"] = str(config.results_directory)
     run_config["checkpoint_directory"] = str(config.checkpoint_directory)
     return run_config
@@ -213,12 +220,57 @@ def save_model_checkpoint(
     return checkpoint_path
 
 
+def save_live_checkpoint(path: Path, payload: dict) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    temporary_path = path.with_suffix(".tmp")
+    torch.save(payload, temporary_path)
+    os.replace(temporary_path, path)
+
+
+def write_loss_log(path: Path, losses: list[dict]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open("w", newline="") as file:
+        writer = csv.DictWriter(file, fieldnames=["step", "weighted_training_loss"])
+        writer.writeheader()
+        writer.writerows(losses)
+
+
+def random_state() -> dict:
+    return {
+        "python": random.getstate(),
+        "numpy": np.random.get_state(),
+        "torch": torch.get_rng_state(),
+        "cuda": torch.cuda.get_rng_state_all() if torch.cuda.is_available() else None,
+    }
+
+
+def restore_random_state(state: dict) -> None:
+    random.setstate(state["python"])
+    np.random.set_state(state["numpy"])
+    torch.set_rng_state(state["torch"])
+    if state["cuda"] is not None:
+        torch.cuda.set_rng_state_all(state["cuda"])
+
+
 def run_experiment(config: ExperimentConfig) -> Path:
     set_randomness_seed(config.random_seed)
     device = get_default_device()
-    started_at = datetime.now().astimezone()
     run_config = build_run_config(config)
-    run_id, config_hash = make_run_id(started_at, run_config)
+    resume_state = None
+    if config.resume_checkpoint is not None:
+        resume_state = torch.load(
+            config.resume_checkpoint, map_location="cpu", weights_only=False
+        )
+        if resume_state["label"] != "latest":
+            raise ValueError("Resume requires a latest checkpoint")
+        if resume_state["run_config"] != run_config:
+            raise ValueError("Resume configuration differs from the checkpoint")
+        started_at = datetime.fromisoformat(resume_state["run_started_at"])
+        run_id = resume_state["run_id"]
+        config_hash = resume_state["config_hash"]
+    else:
+        started_at = datetime.now().astimezone()
+        run_id, config_hash = make_run_id(started_at, run_config)
     print(f"device: {device}")
     print(f"run_id: {run_id}")
 
@@ -257,16 +309,54 @@ def run_experiment(config: ExperimentConfig) -> Path:
         hard_negative_contract_weights=config.hard_negative_contract_weights,
     )
 
-    checkpoint_states = {0: clone_state_dict(model)}
-    checkpoint_frames = []
-    training_losses = []
+    config.results_directory.mkdir(parents=True, exist_ok=True)
+    run_results_path = config.results_directory / f"{run_id}.csv"
+    loss_log_path = config.results_directory / f"{run_id}_loss.csv"
+    if run_results_path.exists():
+        raise FileExistsError(f"Refusing to overwrite existing run: {run_results_path}")
     train_started_at = time.perf_counter()
 
-    optimizer.eval()
-    checkpoint_frames.append(checkpoint_frame(model, tokenizer, benchmarks, device, 0))
-    optimizer.train()
+    if resume_state is None:
+        checkpoint_frames = []
+        training_losses = []
+        completed_step = 0
+        optimizer.eval()
+        initial_frame = checkpoint_frame(model, tokenizer, benchmarks, device, 0)
+        checkpoint_frames.append(initial_frame)
+        best_step = 0
+        best_score = float(initial_frame["pr_auc"].mean())
+        best_state = clone_state_dict(model)
+        optimizer.train()
+        write_loss_log(loss_log_path, training_losses)
+        if config.save_models and config.save_best_model:
+            save_live_checkpoint(
+                config.checkpoint_directory / f"{run_id}_best.pt",
+                {
+                    "run_id": run_id,
+                    "step": best_step,
+                    "label": "best",
+                    "run_config": run_config,
+                    "model_state_dict": best_state,
+                },
+            )
+    else:
+        completed_step = int(resume_state["step"])
+        if completed_step >= config.num_steps:
+            raise ValueError("Checkpoint has already reached the configured num_steps")
+        model.load_state_dict(resume_state["training_model_state_dict"])
+        optimizer.load_state_dict(resume_state["optimizer_state_dict"])
+        prior.rng.bit_generator.state = resume_state["loader_rng_state"]
+        prior.num_steps = config.num_steps - completed_step
+        checkpoint_frames = resume_state["checkpoint_frames"]
+        training_losses = resume_state["training_losses"]
+        best_step = int(resume_state["best_step"])
+        best_score = float(resume_state["best_score"])
+        best_state = resume_state["best_model_state_dict"]
+        write_loss_log(loss_log_path, training_losses)
+        restore_random_state(resume_state["random_state"])
+        print(f"resuming after step {completed_step}", flush=True)
 
-    for step, full_data in enumerate(prior, start=1):
+    for step, full_data in enumerate(prior, start=completed_step + 1):
         model.train()
         optimizer.train()
         optimizer.zero_grad()
@@ -294,10 +384,14 @@ def run_experiment(config: ExperimentConfig) -> Path:
         training_losses.append(
             {"step": step, "weighted_training_loss": float(loss.detach().cpu())}
         )
+        with loss_log_path.open("a", newline="") as file:
+            csv.writer(file).writerow(
+                [step, training_losses[-1]["weighted_training_loss"]]
+            )
 
         if config.progress_every > 0 and step % config.progress_every == 0:
             elapsed_seconds = time.perf_counter() - train_started_at
-            seconds_per_step = elapsed_seconds / step
+            seconds_per_step = elapsed_seconds / (step - completed_step)
             print(
                 "step "
                 f"{step}/{config.num_steps} "
@@ -312,11 +406,48 @@ def run_experiment(config: ExperimentConfig) -> Path:
         if step % config.eval_every == 0 or step == config.num_steps:
             model.eval()
             optimizer.eval()
-            checkpoint_states[step] = clone_state_dict(model)
-            checkpoint_frames.append(
-                checkpoint_frame(model, tokenizer, benchmarks, device, step)
-            )
+            inference_state = clone_state_dict(model)
+            frame = checkpoint_frame(model, tokenizer, benchmarks, device, step)
+            checkpoint_frames.append(frame)
+            score = float(frame["pr_auc"].mean())
+            if score > best_score:
+                best_step = step
+                best_score = score
+                best_state = inference_state
+                if config.save_models and config.save_best_model:
+                    save_live_checkpoint(
+                        config.checkpoint_directory / f"{run_id}_best.pt",
+                        {
+                            "run_id": run_id,
+                            "step": best_step,
+                            "label": "best",
+                            "run_config": run_config,
+                            "model_state_dict": best_state,
+                        },
+                    )
             optimizer.train()
+            if config.save_models and config.save_last_model:
+                save_live_checkpoint(
+                    config.checkpoint_directory / f"{run_id}_latest.pt",
+                    {
+                        "run_id": run_id,
+                        "step": step,
+                        "label": "latest",
+                        "run_config": run_config,
+                        "run_started_at": started_at.isoformat(),
+                        "config_hash": config_hash,
+                        "model_state_dict": inference_state,
+                        "training_model_state_dict": clone_state_dict(model),
+                        "optimizer_state_dict": optimizer.state_dict(),
+                        "loader_rng_state": deepcopy(prior.rng.bit_generator.state),
+                        "random_state": random_state(),
+                        "checkpoint_frames": checkpoint_frames,
+                        "training_losses": training_losses,
+                        "best_step": best_step,
+                        "best_score": best_score,
+                        "best_model_state_dict": best_state,
+                    },
+                )
             print(f"evaluated step {step}", flush=True)
 
     history = pd.concat(checkpoint_frames, ignore_index=True)
@@ -333,15 +464,11 @@ def run_experiment(config: ExperimentConfig) -> Path:
         )
         run_results.insert(3, key, serialized_value)
 
-    config.results_directory.mkdir(parents=True, exist_ok=True)
-    run_results_path = config.results_directory / f"{run_id}.csv"
-    if run_results_path.exists():
-        raise FileExistsError(f"Refusing to overwrite existing run: {run_results_path}")
     run_results.to_csv(run_results_path, index=False)
     print(f"saved run results: {run_results_path}")
 
     mean_history = history.groupby("step").mean(numeric_only=True)
-    best_mean_step = int(mean_history["pr_auc"].idxmax())
+    best_mean_step = best_step
     final_step = int(history["step"].max())
     print(f"best mean PR-AUC checkpoint: {best_mean_step}")
     print(f"final checkpoint: {final_step}")
@@ -356,13 +483,13 @@ def run_experiment(config: ExperimentConfig) -> Path:
                 config,
                 run_id,
                 run_config,
-                checkpoint_states,
+                {best_step: best_state},
                 best_mean_step,
                 "best",
             )
         if config.save_last_model and final_step != best_mean_step:
             save_model_checkpoint(
-                config, run_id, run_config, checkpoint_states, final_step, "last"
+                config, run_id, run_config, {final_step: inference_state}, final_step, "last"
             )
         elif config.save_last_model:
             print("best and last checkpoint are the same step; saved one checkpoint")
@@ -471,10 +598,25 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--save-models", action="store_true")
     parser.add_argument("--no-save-best-model", action="store_true")
     parser.add_argument("--no-save-last-model", action="store_true")
+    parser.add_argument(
+        "--resume", type=Path, help="Resume a latest checkpoint using its saved run settings."
+    )
     return parser.parse_args()
 
 
 def config_from_args(args: argparse.Namespace) -> ExperimentConfig:
+    if args.resume is not None:
+        checkpoint = torch.load(args.resume, map_location="cpu", weights_only=False)
+        if checkpoint["label"] != "latest":
+            raise ValueError("Resume requires a latest checkpoint")
+        saved = checkpoint["run_config"].copy()
+        saved["results_directory"] = Path(saved["results_directory"])
+        saved["checkpoint_directory"] = Path(saved["checkpoint_directory"])
+        saved["frozen_dgp_configs"] = {
+            name: FrozenDGPConfig(**value)
+            for name, value in saved["frozen_dgp_configs"].items()
+        }
+        return ExperimentConfig(**saved, resume_checkpoint=args.resume)
     frozen_dgp_configs = {} if args.no_frozen_dgp else {"person_dgp": FrozenDGPConfig()}
     return ExperimentConfig(
         random_seed=args.random_seed,
