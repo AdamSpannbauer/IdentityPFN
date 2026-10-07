@@ -37,6 +37,7 @@ class RevelioSampler:
         company_ref_dir: str | Path,
     ) -> None:
         self.individual_user_dir = Path(individual_user_dir)
+        self.user_files = sorted(self.individual_user_dir.glob("*.parquet"))
         self.individual_position_dir = Path(individual_position_dir)
         self.individual_user_education_dir = Path(individual_user_education_dir)
         self.individual_user_skill_dir = Path(individual_user_skill_dir)
@@ -46,7 +47,7 @@ class RevelioSampler:
         self, n_entities: int, rng: np.random.Generator
     ) -> pd.DataFrame:
         """Sample distinct users, excluding probability and prestige columns."""
-        user_files = str(self.individual_user_dir / "*.parquet")
+        user_file = str(self.user_files[int(rng.integers(len(self.user_files)))])
         connection = duckdb.connect()
         seed = int(rng.integers(0, 2**31))
         query = (
@@ -55,7 +56,7 @@ class RevelioSampler:
             "FROM read_parquet(?) "
             f"USING SAMPLE reservoir({n_entities} ROWS) REPEATABLE ({seed})"
         )
-        people = connection.execute(query, [user_files]).df()
+        people = connection.execute(query, [user_file]).df()
         connection.close()
         if not people["user_id"].is_unique:
             raise ValueError("Sampled Revelio users contain duplicate user_id values")
