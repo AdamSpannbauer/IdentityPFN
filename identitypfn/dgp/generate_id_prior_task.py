@@ -34,6 +34,14 @@ def generate_id_prior_task(
     selected_fields = rng.choice(
         list(available_types), size=n_fields, replace=False
     ).tolist()
+    selected_types = {
+        field: (
+            "text"
+            if available_types[field] == "categorical" and rng.random() < 0.5
+            else available_types[field]
+        )
+        for field in selected_fields
+    }
 
     entity_ids = sample_uniform_slot_entity_ids(n_records, p_match, rng)
     entities = sample_entities(int(entity_ids.max()) + 1, rng)
@@ -51,7 +59,7 @@ def generate_id_prior_task(
     records = entities.iloc[entity_ids][selected_fields].reset_index(drop=True)
     records = apply_corruptions(
         records,
-        {field: available_types[field] for field in selected_fields},
+        selected_types,
         rng,
         allow_ollama=allow_ollama,
         ollama_model=ollama_model,
@@ -64,7 +72,7 @@ def generate_id_prior_task(
         records=records,
         entity_ids=entity_ids,
         adjacency=entity_ids[:, None] == entity_ids[None, :],
-        field_types=[available_types[field] for field in selected_fields],
+        field_types=[selected_types[field] for field in selected_fields],
     )
 
 

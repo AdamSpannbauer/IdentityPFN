@@ -11,6 +11,8 @@ from .text_level import abbreviate, substitute_nickname
 
 
 def _operations(field: str, field_type: str, allow_ollama: bool) -> list[str]:
+    if field_type == "categorical":
+        return ["category_swap"]
     operations = ["delete", "swap"]
     if field_type == "text":
         operations.extend(("ocr", "keyboard", "insert", "substitute", "nickname"))
@@ -49,6 +51,11 @@ def apply_corruptions(
         missing_rate = float(rng.uniform(0, 0.2))
         corruption_rate = float(rng.uniform(0, 0.2))
         operations = _operations(field, field_type, allow_ollama)
+        category_values = (
+            clean_records[field].dropna().to_numpy()
+            if field_type == "categorical"
+            else None
+        )
         column_index = clean_records.columns.get_loc(field)
         for row_index, value in enumerate(clean_records[field]):
             if pd.isna(value):
@@ -59,7 +66,10 @@ def apply_corruptions(
             if rng.random() >= corruption_rate:
                 continue
             operation = str(rng.choice(operations))
-            if operation == "delete":
+            if operation == "category_swap":
+                alternatives = category_values[category_values != value]
+                edited = rng.choice(alternatives) if len(alternatives) else value
+            elif operation == "delete":
                 edited = delete_character(value, rng)
             elif operation == "swap":
                 edited = swap_characters(value, rng)

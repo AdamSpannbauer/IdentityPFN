@@ -17,7 +17,7 @@ REVELIO_USER_FIELD_TYPES = {
     "ethnicity_predicted": "categorical",
     "profile_linkedin_url": "identifier",
     "user_location": "text",
-    "user_country": "categorical",
+    "user_country": "text",
     "profile_title": "text",
     "updated_dt": "date",
     "numconnections": "numeric",
