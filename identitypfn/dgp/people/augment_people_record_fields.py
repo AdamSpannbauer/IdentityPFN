@@ -4,6 +4,7 @@ from collections.abc import Collection
 from functools import lru_cache
 import re
 import unicodedata
+import warnings
 
 from faker import Faker
 import numpy as np
@@ -11,7 +12,7 @@ import pandas as pd
 import phonenumbers
 from phonenumbers import geocoder
 
-from ...call_ollama import call_ollama_json
+from ...call_ollama import OllamaTokenRepeatError, call_ollama_json
 
 
 PERSONAL_DOMAINS = (
@@ -211,7 +212,11 @@ def sample_email(
     if route == "first_last":
         return make_personal_email(first_name, last_name, rng)
     if route == "ollama":
-        return sample_ollama_email(first_name, last_name, ollama_model)
+        try:
+            return sample_ollama_email(first_name, last_name, ollama_model)
+        except OllamaTokenRepeatError:
+            warnings.warn("Ollama token repetition aborted email generation; using Faker")
+            return sample_faker_email(rng)
     return sample_faker_email(rng)
 
 

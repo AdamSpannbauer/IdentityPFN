@@ -4,6 +4,10 @@ from typing import Literal
 OllamaModel = Literal["llama3.2:1b", "qwen2.5:7b", "qwen3.6:27b"]
 
 
+class OllamaTokenRepeatError(RuntimeError):
+    """Ollama aborted one response after repetitive generation."""
+
+
 def call_ollama_json(
     prompt: str,
     model: OllamaModel | str,
@@ -23,12 +27,17 @@ def call_ollama_json(
         messages.append({"role": "system", "content": system_prompt})
     messages.append({"role": "user", "content": prompt})
 
-    response = ollama.chat(
-        model=model,
-        messages=messages,
-        format="json",
-        options=options,
-    )
+    try:
+        response = ollama.chat(
+            model=model,
+            messages=messages,
+            format="json",
+            options=options,
+        )
+    except ollama.ResponseError as exc:
+        if exc.status_code == 500 and "token repeat limit reached" in exc.error.lower():
+            raise OllamaTokenRepeatError(str(exc)) from exc
+        raise
     text = response.message.content
 
     return {
