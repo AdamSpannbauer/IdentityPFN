@@ -47,6 +47,8 @@ class ExperimentConfig:
     revelio_root: str | None = None
     id_prior_allow_ollama: bool = False
     id_prior_ollama_model: str = "llama3.2:1b"
+    id_prior_ollama_augment_rate: float | None = None
+    id_prior_ollama_corrupt_rate: float | None = None
     wag_allow_ollama: bool = False
     wag_ollama_model: str = "qwen2.5:7b"
     wag_missing_rate: list[float] | None = None
@@ -102,6 +104,10 @@ class ExperimentConfig:
 def build_run_config(config: ExperimentConfig) -> dict:
     run_config = asdict(config)
     run_config.pop("resume_checkpoint")
+    if config.id_prior_ollama_augment_rate is None:
+        run_config.pop("id_prior_ollama_augment_rate")
+    if config.id_prior_ollama_corrupt_rate is None:
+        run_config.pop("id_prior_ollama_corrupt_rate")
     run_config["results_directory"] = str(config.results_directory)
     run_config["checkpoint_directory"] = str(config.checkpoint_directory)
     return run_config
@@ -300,6 +306,8 @@ def run_experiment(config: ExperimentConfig) -> Path:
             if config.train_generator == "id_prior"
             else config.wag_ollama_model
         ),
+        id_prior_ollama_augment_rate=config.id_prior_ollama_augment_rate,
+        id_prior_ollama_corrupt_rate=config.id_prior_ollama_corrupt_rate,
         revelio_root=config.revelio_root,
         missing_rate=config.wag_missing_rate,
         nickname_rate=config.wag_nickname_rate,
@@ -518,6 +526,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--revelio-root", type=str)
     parser.add_argument("--id-prior-allow-ollama", action="store_true")
     parser.add_argument("--id-prior-ollama-model", default="llama3.2:1b")
+    parser.add_argument("--id-prior-ollama-augment-rate", type=float)
+    parser.add_argument("--id-prior-ollama-corrupt-rate", type=float)
     parser.add_argument("--wag-allow-ollama", action="store_true")
     parser.add_argument("--wag-ollama-model", default="qwen2.5:7b")
     parser.add_argument(
@@ -617,6 +627,14 @@ def config_from_args(args: argparse.Namespace) -> ExperimentConfig:
             for name, value in saved["frozen_dgp_configs"].items()
         }
         return ExperimentConfig(**saved, resume_checkpoint=args.resume)
+    for rate in (args.id_prior_ollama_augment_rate, args.id_prior_ollama_corrupt_rate):
+        if rate is not None and not 0 <= rate <= 1:
+            raise ValueError("id-prior Ollama rates must be between 0 and 1")
+    if not args.id_prior_allow_ollama and any(
+        rate is not None and rate > 0
+        for rate in (args.id_prior_ollama_augment_rate, args.id_prior_ollama_corrupt_rate)
+    ):
+        raise ValueError("Positive id-prior Ollama rates require --id-prior-allow-ollama")
     frozen_dgp_configs = {} if args.no_frozen_dgp else {"person_dgp": FrozenDGPConfig()}
     return ExperimentConfig(
         random_seed=args.random_seed,
@@ -632,6 +650,8 @@ def config_from_args(args: argparse.Namespace) -> ExperimentConfig:
         revelio_root=args.revelio_root,
         id_prior_allow_ollama=args.id_prior_allow_ollama,
         id_prior_ollama_model=args.id_prior_ollama_model,
+        id_prior_ollama_augment_rate=args.id_prior_ollama_augment_rate,
+        id_prior_ollama_corrupt_rate=args.id_prior_ollama_corrupt_rate,
         wag_allow_ollama=args.wag_allow_ollama,
         wag_ollama_model=args.wag_ollama_model,
         wag_missing_rate=args.wag_missing_rate,

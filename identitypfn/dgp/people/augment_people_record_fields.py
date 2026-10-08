@@ -190,8 +190,9 @@ def sample_email(
     rng: np.random.Generator,
     allow_ollama: bool = False,
     ollama_model: str = "llama3.2:1b",
+    ollama_rate: float | None = None,
 ) -> str:
-    """Choose uniformly among email routes supported by the available names."""
+    """Choose an email route supported by the available names."""
     has_first = pd.notna(first_name) and bool(str(first_name).strip())
     has_last = pd.notna(last_name) and bool(str(last_name).strip())
     routes = ["faker"]
@@ -201,10 +202,16 @@ def sample_email(
         routes.append("last")
     if has_first and has_last:
         routes.append("first_last")
-    if allow_ollama:
+    if allow_ollama and ollama_rate is None:
         routes.append("ollama")
 
-    route = str(rng.choice(routes))
+    use_ollama = (
+        allow_ollama
+        and ollama_rate is not None
+        and ollama_rate > 0
+        and rng.random() < ollama_rate
+    )
+    route = "ollama" if use_ollama else str(rng.choice(routes))
     if route == "first":
         return sample_single_name_email(first_name, rng)
     if route == "last":
@@ -226,6 +233,7 @@ def augment_people_record_fields(
     rng: np.random.Generator,
     allow_ollama: bool = False,
     ollama_model: str = "llama3.2:1b",
+    ollama_rate: float | None = None,
     country_field: str | None = None,
 ) -> pd.DataFrame:
     """Add only the requested synthetic fields, once per person."""
@@ -240,6 +248,7 @@ def augment_people_record_fields(
                 rng,
                 allow_ollama=allow_ollama,
                 ollama_model=ollama_model,
+                ollama_rate=ollama_rate,
             )
             for _, person in people.iterrows()
         ]

@@ -31,6 +31,8 @@ class SyntheticWorldDataLoader(DataLoader):
         generator="person",
         allow_ollama=None,
         ollama_model="qwen2.5:7b",
+        id_prior_ollama_augment_rate=None,
+        id_prior_ollama_corrupt_rate=None,
         missing_rate=None,
         nickname_rate=None,
         corruption_rate=None,
@@ -45,6 +47,8 @@ class SyntheticWorldDataLoader(DataLoader):
         self.generator = generator
         self.allow_ollama = allow_ollama
         self.ollama_model = ollama_model
+        self.id_prior_ollama_augment_rate = id_prior_ollama_augment_rate
+        self.id_prior_ollama_corrupt_rate = id_prior_ollama_corrupt_rate
         self.missing_rate = missing_rate
         self.nickname_rate = nickname_rate
         self.corruption_rate = corruption_rate
@@ -93,6 +97,8 @@ class SyntheticWorldDataLoader(DataLoader):
                         rng=np.random.default_rng(world_rng.integers(0, 2**32)),
                         allow_ollama=bool(self.allow_ollama),
                         ollama_model=self.ollama_model,
+                        ollama_augment_rate=self.id_prior_ollama_augment_rate,
+                        ollama_corrupt_rate=self.id_prior_ollama_corrupt_rate,
                         country_field="user_country",
                     )
                     for _ in range(self.batch_size)

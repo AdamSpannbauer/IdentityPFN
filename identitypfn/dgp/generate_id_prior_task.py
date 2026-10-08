@@ -22,6 +22,8 @@ def generate_id_prior_task(
     rng: np.random.Generator,
     allow_ollama: bool = False,
     ollama_model: str = "llama3.2:1b",
+    ollama_augment_rate: float | None = None,
+    ollama_corrupt_rate: float | None = None,
     country_field: str | None = None,
 ) -> World:
     """Sample a schema and partition, then turn source entities into records."""
@@ -54,6 +56,7 @@ def generate_id_prior_task(
         rng,
         allow_ollama=allow_ollama,
         ollama_model=ollama_model,
+        ollama_rate=ollama_augment_rate,
         country_field=country_field,
     )
     records = entities.iloc[entity_ids][selected_fields].reset_index(drop=True)
@@ -63,6 +66,7 @@ def generate_id_prior_task(
         rng,
         allow_ollama=allow_ollama,
         ollama_model=ollama_model,
+        ollama_rate=ollama_corrupt_rate,
     )
 
     order = rng.permutation(n_records)

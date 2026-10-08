@@ -43,6 +43,7 @@ def apply_corruptions(
     rng: np.random.Generator,
     allow_ollama: bool = False,
     ollama_model: str = "llama3.2:1b",
+    ollama_rate: float | None = None,
 ) -> pd.DataFrame:
     """Independently observe every record, including singleton records."""
     observed = clean_records.astype(object).copy()
@@ -50,7 +51,7 @@ def apply_corruptions(
         field_type = field_types[field]
         missing_rate = float(rng.uniform(0, 0.2))
         corruption_rate = float(rng.uniform(0, 0.2))
-        operations = _operations(field, field_type, allow_ollama)
+        operations = _operations(field, field_type, allow_ollama and ollama_rate is None)
         category_values = (
             clean_records[field].dropna().to_numpy()
             if field_type == "categorical"
@@ -65,7 +66,14 @@ def apply_corruptions(
                 continue
             if rng.random() >= corruption_rate:
                 continue
-            operation = str(rng.choice(operations))
+            use_ollama = (
+                allow_ollama
+                and ollama_rate is not None
+                and ollama_rate > 0
+                and field_type != "categorical"
+                and rng.random() < ollama_rate
+            )
+            operation = "llm" if use_ollama else str(rng.choice(operations))
             if operation == "category_swap":
                 alternatives = category_values[category_values != value]
                 edited = rng.choice(alternatives) if len(alternatives) else value
