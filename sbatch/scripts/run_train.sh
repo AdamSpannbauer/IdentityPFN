@@ -17,6 +17,11 @@ set -e
 
 export OMP_NUM_THREADS="$SLURM_CPUS_PER_TASK"
 ollama_args=()
+loss_args=()
+
+if [[ "${UNWEIGHTED:-0}" == 1 ]]; then
+    loss_args=(--pos-weight 1)
+fi
 
 if [[ "${USE_OLLAMA:-0}" == 1 ]]; then
     export OLLAMA_MODELS=/lustre/isaac24/proj/UTK0526/ollama/models
@@ -36,6 +41,7 @@ time uv run --no-sync --no-dev python -m experiments.run_benchmark_experiment \
     --random-seed "${SEED:-1337}" \
     --revelio-root /lustre/isaac24/proj/UTK0373 \
     --num-steps "$STEPS" \
+    --hard-negative-rate "${HN_RATE:-0}" \
     --eval-every 50 \
     --batch-size 2 \
     --record-representation mean_pool \
@@ -44,5 +50,5 @@ time uv run --no-sync --no-dev python -m experiments.run_benchmark_experiment \
     --max-categories 256 \
     --progress-every 25 \
     --save-models \
+    "${loss_args[@]}" \
     "${ollama_args[@]}"
-
