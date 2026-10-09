@@ -25,17 +25,27 @@ def generate_id_prior_task(
     ollama_augment_rate: float | None = None,
     ollama_corrupt_rate: float | None = None,
     country_field: str | None = None,
+    must_include_any: list[str] | None = None,
+    augment_people: bool = True,
 ) -> World:
     """Sample a schema and partition, then turn source entities into records."""
     augmentation_types = {
         field: field_type
         for field, field_type in IMPLEMENTED_AUGMENTATION_FIELD_TYPES.items()
-        if field not in field_types
+        if augment_people and field not in field_types
     }
     available_types = dict(field_types) | augmentation_types
-    selected_fields = rng.choice(
-        list(available_types), size=n_fields, replace=False
-    ).tolist()
+    if must_include_any:
+        anchor = str(rng.choice(must_include_any))
+        remaining = [field for field in available_types if field != anchor]
+        selected_fields = [anchor] + rng.choice(
+            remaining, size=n_fields - 1, replace=False
+        ).tolist()
+        rng.shuffle(selected_fields)
+    else:
+        selected_fields = rng.choice(
+            list(available_types), size=n_fields, replace=False
+        ).tolist()
     selected_types = {
         field: (
             "text"
@@ -50,15 +60,16 @@ def generate_id_prior_task(
     selected_augmentations = [
         field for field in selected_fields if field in augmentation_types
     ]
-    entities = augment_people_record_fields(
-        entities,
-        selected_augmentations,
-        rng,
-        allow_ollama=allow_ollama,
-        ollama_model=ollama_model,
-        ollama_rate=ollama_augment_rate,
-        country_field=country_field,
-    )
+    if augment_people:
+        entities = augment_people_record_fields(
+            entities,
+            selected_augmentations,
+            rng,
+            allow_ollama=allow_ollama,
+            ollama_model=ollama_model,
+            ollama_rate=ollama_augment_rate,
+            country_field=country_field,
+        )
     records = entities.iloc[entity_ids][selected_fields].reset_index(drop=True)
     records = apply_corruptions(
         records,

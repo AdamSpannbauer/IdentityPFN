@@ -43,8 +43,9 @@ class ExperimentConfig:
     grad_clip_norm: float = 1.0
     pos_weight: float | None = None
     progress_every: int = 25
-    train_generator: Literal["person", "wag", "id_prior"] = "person"
+    train_generator: Literal["person", "wag", "id_prior", "bank"] = "person"
     revelio_root: str | None = None
+    train_manifest: str = "training_data/manifest.json"
     id_prior_allow_ollama: bool = False
     id_prior_ollama_model: str = "llama3.2:1b"
     id_prior_ollama_augment_rate: float | None = None
@@ -104,6 +105,8 @@ class ExperimentConfig:
 def build_run_config(config: ExperimentConfig) -> dict:
     run_config = asdict(config)
     run_config.pop("resume_checkpoint")
+    if config.train_generator != "bank":
+        run_config.pop("train_manifest")
     if config.id_prior_ollama_augment_rate is None:
         run_config.pop("id_prior_ollama_augment_rate")
     if config.id_prior_ollama_corrupt_rate is None:
@@ -298,17 +301,20 @@ def run_experiment(config: ExperimentConfig) -> Path:
         generator=config.train_generator,
         allow_ollama=(
             config.id_prior_allow_ollama
-            if config.train_generator == "id_prior"
+            if config.train_generator in {"id_prior", "bank"}
             else config.wag_allow_ollama
         ),
         ollama_model=(
             config.id_prior_ollama_model
-            if config.train_generator == "id_prior"
+            if config.train_generator in {"id_prior", "bank"}
             else config.wag_ollama_model
         ),
         id_prior_ollama_augment_rate=config.id_prior_ollama_augment_rate,
         id_prior_ollama_corrupt_rate=config.id_prior_ollama_corrupt_rate,
         revelio_root=config.revelio_root,
+        train_manifest=config.train_manifest,
+        bank_wag_allow_ollama=config.wag_allow_ollama,
+        bank_wag_ollama_model=config.wag_ollama_model,
         missing_rate=config.wag_missing_rate,
         nickname_rate=config.wag_nickname_rate,
         corruption_rate=config.wag_corruption_rate,
@@ -400,6 +406,11 @@ def run_experiment(config: ExperimentConfig) -> Path:
         if config.progress_every > 0 and step % config.progress_every == 0:
             elapsed_seconds = time.perf_counter() - train_started_at
             seconds_per_step = elapsed_seconds / (step - completed_step)
+            sources = (
+                f" sources={','.join(full_data['source_names'])}"
+                if config.train_generator == "bank"
+                else ""
+            )
             print(
                 "step "
                 f"{step}/{config.num_steps} "
@@ -407,7 +418,7 @@ def run_experiment(config: ExperimentConfig) -> Path:
                 f"pos={int(num_positive.detach().cpu())} "
                 f"neg={int(num_negative.detach().cpu())} "
                 f"elapsed={elapsed_seconds / 60:.1f}m "
-                f"rate={seconds_per_step:.2f}s/step",
+                f"rate={seconds_per_step:.2f}s/step{sources}",
                 flush=True,
             )
 
@@ -520,10 +531,11 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--progress-every", type=int, default=25)
     parser.add_argument(
         "--train-generator",
-        choices=["person", "wag", "id_prior"],
+        choices=["person", "wag", "id_prior", "bank"],
         default="person",
     )
     parser.add_argument("--revelio-root", type=str)
+    parser.add_argument("--train-manifest", default="training_data/manifest.json")
     parser.add_argument("--id-prior-allow-ollama", action="store_true")
     parser.add_argument("--id-prior-ollama-model", default="llama3.2:1b")
     parser.add_argument("--id-prior-ollama-augment-rate", type=float)
@@ -648,6 +660,7 @@ def config_from_args(args: argparse.Namespace) -> ExperimentConfig:
         progress_every=args.progress_every,
         train_generator=args.train_generator,
         revelio_root=args.revelio_root,
+        train_manifest=args.train_manifest,
         id_prior_allow_ollama=args.id_prior_allow_ollama,
         id_prior_ollama_model=args.id_prior_ollama_model,
         id_prior_ollama_augment_rate=args.id_prior_ollama_augment_rate,

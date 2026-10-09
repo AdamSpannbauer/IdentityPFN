@@ -6,6 +6,7 @@ experiments/
 competitor_repos/
 benchmark_data/
 results/
+training_data/raw/
 
 # Local model/data downloads and generated outputs
 cc.en.300.bin

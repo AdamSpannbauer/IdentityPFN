@@ -1,0 +1,332 @@
+{
+  "_schema": {
+    "description": "Contributors to the mixed-source training prior.",
+    "location_roots": {
+      "revelio": "Runtime root of the Revelio parquet export.",
+      "external": "Repository-relative training_data/raw/ directory (local files ignored by Git).",
+      "magellan": "Runtime root of the downloaded Magellan collections."
+    },
+    "field_types": "Eligible columns and tokenizer types; columns not listed are omitted.",
+    "must_include_any": "Sample at least one listed field when drawing a schema from this contributor.",
+    "always_exclude": "Source columns that should remain unavailable even if field inference is added later.",
+    "sampling": "Choose one contributor independently for each world in a training batch; sample distinct base rows and a schema before applying the shared partition and corruption process. Generator contributors produce worlds directly."
+  },
+  "contributors": [
+    {
+      "name": "wag",
+      "role": "train",
+      "kind": "generator",
+      "generator": "wag",
+      "category_path": ["people"],
+      "provenance": {
+        "retrieved_from": null,
+        "original_source": "IdentityPFN WAG generator",
+        "original_source_url": null,
+        "notes": "Fully synthetic people worlds generated in code."
+      }
+    },
+    {
+      "name": "revelio_users",
+      "role": "train",
+      "kind": "table",
+      "format": "parquet_shards",
+      "location": {
+        "root": "revelio",
+        "path": "individual_user/*.parquet"
+      },
+      "category_path": ["people", "employment"],
+      "provenance": {
+        "retrieved_from": null,
+        "original_source": null,
+        "original_source_url": null,
+        "notes": "Revelio individual_user export; upstream provenance not recorded here yet."
+      },
+      "field_types": {
+        "user_id": "identifier",
+        "firstname": "text",
+        "lastname": "text",
+        "fullname": "text",
+        "highest_degree": "categorical",
+        "sex_predicted": "categorical",
+        "ethnicity_predicted": "categorical",
+        "profile_linkedin_url": "identifier",
+        "user_location": "text",
+        "user_country": "text",
+        "profile_title": "text",
+        "updated_dt": "date",
+        "numconnections": "numeric",
+        "profile_summary": "text"
+      },
+      "must_include_any": ["user_id", "firstname", "lastname", "fullname", "profile_linkedin_url"],
+      "always_exclude": [
+        "f_prob",
+        "m_prob",
+        "white_prob",
+        "black_prob",
+        "api_prob",
+        "hispanic_prob",
+        "native_prob",
+        "multiple_prob",
+        "prestige"
+      ]
+    },
+    {
+      "name": "fifa_players",
+      "role": "train",
+      "kind": "table",
+      "format": "csv",
+      "location": {
+        "root": "external",
+        "path": "fifa_players.csv"
+      },
+      "category_path": ["people", "sports", "football"],
+      "provenance": {
+        "retrieved_from": "https://www.kaggle.com/datasets/maso0dahmed/football-players-data",
+        "original_source": null,
+        "original_source_url": null,
+        "notes": "FIFA video-game player attributes; original data source and extraction method not yet verified."
+      },
+      "field_types": {
+        "name": "text",
+        "full_name": "text",
+        "birth_date": "date",
+        "age": "numeric",
+        "height_cm": "numeric",
+        "weight_kgs": "numeric",
+        "positions": "text",
+        "nationality": "text",
+        "overall_rating": "numeric",
+        "potential": "numeric",
+        "value_euro": "numeric",
+        "wage_euro": "numeric",
+        "preferred_foot": "categorical",
+        "international_reputation(1-5)": "numeric",
+        "weak_foot(1-5)": "numeric",
+        "skill_moves(1-5)": "numeric",
+        "body_type": "categorical",
+        "release_clause_euro": "numeric",
+        "national_team": "text",
+        "national_rating": "numeric",
+        "national_team_position": "text",
+        "national_jersey_number": "categorical"
+      },
+      "must_include_any": ["name", "full_name"],
+      "always_exclude": []
+    },
+    {
+      "name": "flipkart_products",
+      "role": "train",
+      "kind": "table",
+      "format": "csv",
+      "location": {
+        "root": "external",
+        "path": "flipkart_com-ecommerce_sample.csv"
+      },
+      "category_path": ["products", "ecommerce"],
+      "provenance": {
+        "retrieved_from": "https://www.kaggle.com/datasets/PromptCloudHQ/flipkart-products",
+        "original_source": null,
+        "original_source_url": null,
+        "notes": "Flipkart product sample; upstream collection details not verified."
+      },
+      "field_types": {
+        "uniq_id": "identifier",
+        "crawl_timestamp": "date",
+        "product_url": "identifier",
+        "product_name": "text",
+        "product_category_tree": "text",
+        "pid": "identifier",
+        "retail_price": "numeric",
+        "discounted_price": "numeric",
+        "image": "text",
+        "is_FK_Advantage_product": "categorical",
+        "description": "text",
+        "product_rating": "categorical",
+        "overall_rating": "categorical",
+        "brand": "text",
+        "product_specifications": "text"
+      },
+      "must_include_any": ["product_name", "pid"],
+      "always_exclude": []
+    },
+    {
+      "name": "cs784_bikedekho",
+      "role": "train",
+      "kind": "table",
+      "format": "csv",
+      "location": {
+        "root": "magellan",
+        "path": "784/Bikes/csv_files/bikedekho.csv"
+      },
+      "category_path": ["products", "vehicles", "motorcycles"],
+      "provenance": {
+        "retrieved_from": "https://pages.cs.wisc.edu/~anhai/data/784_data/bikes.tar.gz",
+        "original_source": "Bikedekho",
+        "original_source_url": null,
+        "notes": "CS 784 Bikes source-A table from the Magellan Data Repository."
+      },
+      "field_types": {
+        "id": "identifier",
+        "bike_name": "text",
+        "city_posted": "text",
+        "km_driven": "numeric",
+        "color": "categorical",
+        "fuel_type": "categorical",
+        "price": "numeric",
+        "model_year": "numeric",
+        "owner_type": "categorical",
+        "url": "identifier"
+      },
+      "must_include_any": ["id", "bike_name"],
+      "always_exclude": []
+    },
+    {
+      "name": "jobs",
+      "role": "candidate",
+      "kind": "table",
+      "format": "tsv",
+      "location": {
+        "root": "external",
+        "path": "jobs.tsv"
+      },
+      "category_path": ["employment", "job_postings"],
+      "provenance": {
+        "retrieved_from": "https://www.kaggle.com/datasets/jsrshivam/job-recommendation-case-study",
+        "original_source": null,
+        "original_source_url": null,
+        "notes": "Upstream source unverified; large TSV needs a scalable sampler before training."
+      },
+      "field_types": {
+        "JobID": "identifier",
+        "Title": "text",
+        "Description": "text",
+        "Requirements": "text",
+        "City": "text",
+        "State": "text",
+        "Country": "text",
+        "Zip5": "identifier",
+        "StartDate": "date",
+        "EndDate": "date"
+      },
+      "must_include_any": ["Title", "Description"],
+      "always_exclude": ["WindowID"]
+    },
+    {
+      "name": "multi_agency_violators",
+      "role": "train",
+      "kind": "table",
+      "format": "csv",
+      "location": {
+        "root": "external",
+        "path": "multi_agency_violators.csv"
+      },
+      "category_path": ["organizations", "business_establishments"],
+      "provenance": {
+        "retrieved_from": "https://www.kaggle.com/datasets/benturneroffice365/cross-agency-federal-violations-database",
+        "original_source": null,
+        "original_source_url": null,
+        "notes": "Location-specific employer records; upstream compilation source not yet verified."
+      },
+      "field_types": {
+        "employer_name": "text",
+        "city": "text",
+        "state": "text",
+        "zip": "identifier",
+        "naics_code": "text",
+        "naics_description": "text",
+        "parent_name": "text",
+        "agencies_with_violations": "numeric",
+        "osha_violations": "numeric",
+        "osha_penalties": "numeric",
+        "osha_fatalities": "numeric",
+        "whd_cases": "numeric",
+        "whd_backwages": "numeric",
+        "msha_violations": "numeric",
+        "msha_penalties": "numeric",
+        "epa_noncompliance_quarters": "numeric",
+        "epa_penalties": "numeric",
+        "nlrb_cases": "numeric",
+        "debarred": "categorical",
+        "risk_score": "numeric"
+      },
+      "must_include_any": ["employer_name"],
+      "always_exclude": []
+    },
+    {
+      "name": "chicago_employees",
+      "role": "train",
+      "kind": "table",
+      "format": "csv",
+      "location": {
+        "root": "external",
+        "path": "chicago_employees.csv"
+      },
+      "category_path": ["people", "employment", "public_sector"],
+      "provenance": {
+        "retrieved_from": "https://data.cityofchicago.org/Administration-Finance/Current-Employee-Names-Salaries-and-Position-Title/xzkq-xp2w/about_data",
+        "original_source": "City of Chicago",
+        "original_source_url": "https://data.cityofchicago.org/Administration-Finance/Current-Employee-Names-Salaries-and-Position-Title/xzkq-xp2w/about_data",
+        "notes": "Employee salary table; names are not guaranteed to identify distinct people."
+      },
+      "field_types": {
+        "Name": "text",
+        "Job Titles": "text",
+        "Department": "categorical",
+        "Full or Part-Time": "categorical",
+        "Salary or Hourly": "categorical",
+        "Typical Hours": "numeric",
+        "Annual Salary": "text",
+        "Hourly Rate": "text"
+      },
+      "must_include_any": ["Name"],
+      "always_exclude": []
+    },
+    {
+      "name": "nyc_high_schools_2014_2015",
+      "role": "candidate",
+      "kind": "table",
+      "format": "csv",
+      "location": {
+        "root": "external",
+        "path": "2014-2015-doe-high-school-directory.csv"
+      },
+      "category_path": ["organizations", "schools", "high_schools"],
+      "provenance": {
+        "retrieved_from": "https://www.kaggle.com/datasets/new-york-city/nyc-high-school-directory",
+        "original_source": null,
+        "original_source_url": null,
+        "notes": "435 unique school rows; too few distinct base rows for many current training worlds."
+      },
+      "field_types": {
+        "dbn": "identifier",
+        "school_name": "text",
+        "borough": "categorical",
+        "building_code": "identifier",
+        "phone_number": "identifier",
+        "fax_number": "identifier",
+        "grade_span_min": "categorical",
+        "grade_span_max": "categorical",
+        "bus": "text",
+        "subway": "text",
+        "primary_address_line_1": "text",
+        "city": "text",
+        "state_code": "categorical",
+        "postcode": "identifier",
+        "website": "identifier",
+        "total_students": "numeric",
+        "campus_name": "text",
+        "school_type": "categorical",
+        "overview_paragraph": "text",
+        "program_highlights": "text",
+        "language_classes": "text",
+        "advancedplacement_courses": "text",
+        "extracurricular_activities": "text",
+        "start_time": "text",
+        "end_time": "text",
+        "number_programs": "numeric"
+      },
+      "must_include_any": ["dbn", "school_name"],
+      "always_exclude": []
+    }
+  ]
+}
