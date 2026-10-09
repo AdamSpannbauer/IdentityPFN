@@ -102,6 +102,8 @@ class SyntheticWorldDataLoader(DataLoader):
                         p_match=float(10 ** world_rng.uniform(-4, -2)),
                         n_fields=int(n_fields),
                         sample_entities=self.revelio_sampler.sample_entities,
+                        sample_entities_for_schema=self.revelio_sampler.sample_entities_for_schema,
+                        hard_negative_rate=self.hard_negative_rate,
                         field_types=REVELIO_USER_FIELD_TYPES,
                         rng=np.random.default_rng(world_rng.integers(0, 2**32)),
                         allow_ollama=bool(self.allow_ollama),

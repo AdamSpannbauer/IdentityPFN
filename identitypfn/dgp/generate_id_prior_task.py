@@ -27,6 +27,10 @@ def generate_id_prior_task(
     country_field: str | None = None,
     must_include_any: list[str] | None = None,
     augment_people: bool = True,
+    sample_entities_for_schema: Callable[
+        [int, list[str], float, np.random.Generator], pd.DataFrame
+    ] | None = None,
+    hard_negative_rate: float = 0.0,
 ) -> World:
     """Sample a schema and partition, then turn source entities into records."""
     augmentation_types = {
@@ -56,7 +60,15 @@ def generate_id_prior_task(
     }
 
     entity_ids = sample_uniform_slot_entity_ids(n_records, p_match, rng)
-    entities = sample_entities(int(entity_ids.max()) + 1, rng)
+    n_entities = int(entity_ids.max()) + 1
+    if hard_negative_rate > 0:
+        if sample_entities_for_schema is None:
+            raise ValueError("sample_entities_for_schema is required for hard negatives")
+        entities = sample_entities_for_schema(
+            n_entities, selected_fields, hard_negative_rate, rng
+        )
+    else:
+        entities = sample_entities(n_entities, rng)
     selected_augmentations = [
         field for field in selected_fields if field in augmentation_types
     ]
