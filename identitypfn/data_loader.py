@@ -2,6 +2,7 @@ from .dgp.people.simple import generate_worlds as generate_person_worlds
 from .dgp.people.wag import generate_worlds as generate_wag_worlds
 from .dgp.generate_id_prior_task import generate_id_prior_task
 from .dgp.people.sample_revelio import REVELIO_USER_FIELD_TYPES, RevelioSampler
+from .dgp.people.sample_wag import WAGEntitySampler
 from .dgp.source_bank import SourceBank
 
 import numpy as np
@@ -41,6 +42,7 @@ class SyntheticWorldDataLoader(DataLoader):
         hard_negative_rate=0.0,
         hard_negative_contract_weights=None,
         revelio_root=None,
+        id_prior_sources=("revelio",),
         train_manifest="training_data/manifest.json",
         bank_wag_allow_ollama=False,
         bank_wag_ollama_model="qwen2.5:7b",
@@ -61,8 +63,11 @@ class SyntheticWorldDataLoader(DataLoader):
         self.hard_negative_contract_weights = hard_negative_contract_weights
         self.bank_wag_allow_ollama = bank_wag_allow_ollama
         self.bank_wag_ollama_model = bank_wag_ollama_model
+        self.id_prior_sources = tuple(id_prior_sources)
+        if not self.id_prior_sources or set(self.id_prior_sources) - {"revelio", "wag"}:
+            raise ValueError("id_prior_sources must contain 'revelio' or 'wag'")
         self.revelio_sampler = None
-        if generator == "id_prior":
+        if generator == "id_prior" and "revelio" in self.id_prior_sources:
             if revelio_root is None:
                 raise ValueError("revelio_root is required for id_prior")
             root = Path(revelio_root)
@@ -96,24 +101,47 @@ class SyntheticWorldDataLoader(DataLoader):
             n_fields = self.rng.integers(3, 11)
             if self.generator == "id_prior":
                 world_rng = np.random.default_rng(world_seed)
-                worlds = [
-                    generate_id_prior_task(
-                        n_records=int(n_records),
-                        p_match=float(10 ** world_rng.uniform(-4, -2)),
-                        n_fields=int(n_fields),
-                        sample_entities=self.revelio_sampler.sample_entities,
-                        sample_entities_for_schema=self.revelio_sampler.sample_entities_for_schema,
-                        hard_negative_rate=self.hard_negative_rate,
-                        field_types=REVELIO_USER_FIELD_TYPES,
-                        rng=np.random.default_rng(world_rng.integers(0, 2**32)),
-                        allow_ollama=bool(self.allow_ollama),
-                        ollama_model=self.ollama_model,
-                        ollama_augment_rate=self.id_prior_ollama_augment_rate,
-                        ollama_corrupt_rate=self.id_prior_ollama_corrupt_rate,
-                        country_field="user_country",
+                worlds = []
+                source_names = []
+                for _ in range(self.batch_size):
+                    source = (
+                        self.id_prior_sources[0]
+                        if len(self.id_prior_sources) == 1
+                        else str(world_rng.choice(self.id_prior_sources))
                     )
-                    for _ in range(self.batch_size)
-                ]
+                    source_names.append(source)
+                    p_match = float(10 ** world_rng.uniform(-4, -2))
+                    task_rng = np.random.default_rng(world_rng.integers(0, 2**32))
+                    if source == "revelio":
+                        sampler = self.revelio_sampler
+                        field_types = REVELIO_USER_FIELD_TYPES
+                        country_field = "user_country"
+                    else:
+                        sampler = WAGEntitySampler(
+                            n_fields=int(n_fields),
+                            rng=task_rng,
+                            allow_ollama=self.bank_wag_allow_ollama,
+                            ollama_model=self.bank_wag_ollama_model,
+                        )
+                        field_types = sampler.field_types
+                        country_field = "country"
+                    worlds.append(
+                        generate_id_prior_task(
+                            n_records=int(n_records),
+                            p_match=p_match,
+                            n_fields=int(n_fields),
+                            sample_entities=sampler.sample_entities,
+                            sample_entities_for_schema=sampler.sample_entities_for_schema,
+                            hard_negative_rate=self.hard_negative_rate,
+                            field_types=field_types,
+                            rng=task_rng,
+                            allow_ollama=bool(self.allow_ollama),
+                            ollama_model=self.ollama_model,
+                            ollama_augment_rate=self.id_prior_ollama_augment_rate,
+                            ollama_corrupt_rate=self.id_prior_ollama_corrupt_rate,
+                            country_field=country_field,
+                        )
+                    )
             elif self.generator == "bank":
                 world_rng = np.random.default_rng(world_seed)
                 worlds = []
@@ -206,7 +234,7 @@ class SyntheticWorldDataLoader(DataLoader):
                     ]
                 ),
             }
-            if self.generator == "bank":
+            if self.generator in {"bank", "id_prior"}:
                 batch["source_names"] = source_names
 
             yield batch
