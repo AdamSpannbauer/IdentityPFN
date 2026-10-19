@@ -357,9 +357,10 @@ def run_experiment(config: ExperimentConfig) -> Path:
             )
     else:
         completed_step = int(resume_state["step"])
-        if completed_step >= config.num_steps:
+        if completed_step > config.num_steps:
             raise ValueError("Checkpoint has already reached the configured num_steps")
         model.load_state_dict(resume_state["training_model_state_dict"])
+        inference_state = resume_state["model_state_dict"]
         optimizer.load_state_dict(resume_state["optimizer_state_dict"])
         prior.rng.bit_generator.state = resume_state["loader_rng_state"]
         prior.num_steps = config.num_steps - completed_step
@@ -480,7 +481,7 @@ def run_experiment(config: ExperimentConfig) -> Path:
     for key, value in reversed(run_config.items()):
         serialized_value = (
             json.dumps(value, sort_keys=True, separators=(",", ":"))
-            if isinstance(value, (dict, list))
+            if isinstance(value, (dict, list, tuple))
             else value
         )
         run_results.insert(3, key, serialized_value)
