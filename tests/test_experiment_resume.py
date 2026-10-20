@@ -129,6 +129,74 @@ class ExperimentResumeTests(unittest.TestCase):
                 pd.read_csv(resumed_results)[["step", "pr_auc", "weighted_training_loss"]],
             )
 
+    def test_extend_completed_legacy_run_preserves_original_outputs(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+
+            def config(name, steps):
+                return ExperimentConfig(
+                    num_steps=steps,
+                    eval_every=2,
+                    batch_size=1,
+                    train_generator="id_prior",
+                    benchmark_names=[],
+                    frozen_dgp_configs={},
+                    results_directory=root / name / "results",
+                    checkpoint_directory=root / name / "checkpoints",
+                    save_models=True,
+                )
+
+            with (
+                patch("experiments.run_benchmark_experiment.Tokenizer", ToyTokenizer),
+                patch("experiments.run_benchmark_experiment.make_model", side_effect=lambda *args: ToyModel()),
+                patch("experiments.run_benchmark_experiment.SyntheticWorldDataLoader", ToyPrior),
+                patch("experiments.run_benchmark_experiment.load_experiment_benchmarks", return_value=[{}]),
+                patch("experiments.run_benchmark_experiment.checkpoint_frame", toy_checkpoint_frame),
+                patch("experiments.run_benchmark_experiment.get_default_device", return_value=torch.device("cpu")),
+            ):
+                ToyPrior.fail_at = None
+                full_results = run_experiment(config("full", 6))
+                original_results = run_experiment(config("extended", 4))
+                latest_path = next((root / "extended" / "checkpoints").glob("*_latest.pt"))
+                original_checkpoint = torch.load(latest_path, weights_only=False)
+                original_checkpoint["run_config"].pop("id_prior_sources")
+                torch.save(original_checkpoint, latest_path)
+                original_outputs = {
+                    path: path.read_bytes()
+                    for folder in (root / "extended" / "results", root / "extended" / "checkpoints")
+                    for path in folder.iterdir()
+                }
+
+                extended_config = config_from_args(Namespace(resume=latest_path, num_steps=6))
+                self.assertEqual(extended_config.id_prior_sources, ("revelio",))
+                self.assertEqual(extended_config.num_steps, 6)
+                extended_results = run_experiment(extended_config)
+
+            for path, contents in original_outputs.items():
+                self.assertEqual(path.read_bytes(), contents)
+            self.assertNotEqual(original_results, extended_results)
+            self.assertEqual(
+                torch.load(latest_path, weights_only=False)["step"], 4
+            )
+            extended_latest = torch.load(
+                next(path for path in (root / "extended" / "checkpoints").glob("*_latest.pt") if path != latest_path),
+                weights_only=False,
+            )
+            self.assertEqual(extended_latest["step"], 6)
+            full_latest = torch.load(
+                next((root / "full" / "checkpoints").glob("*_latest.pt")),
+                weights_only=False,
+            )
+            self.assertTrue(torch.equal(
+                full_latest["training_model_state_dict"]["weight"],
+                extended_latest["training_model_state_dict"]["weight"],
+            ))
+            pd.testing.assert_frame_equal(
+                pd.read_csv(full_results)[["step", "pr_auc", "weighted_training_loss"]],
+                pd.read_csv(extended_results)[["step", "pr_auc", "weighted_training_loss"]],
+            )
+            self.assertEqual(len(list((root / "extended" / "results").glob("*_loss.csv"))), 2)
+
 
 if __name__ == "__main__":
     unittest.main()

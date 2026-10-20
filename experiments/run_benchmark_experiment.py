@@ -267,17 +267,26 @@ def run_experiment(config: ExperimentConfig) -> Path:
     device = get_default_device()
     run_config = build_run_config(config)
     resume_state = None
+    extending_run = False
     if config.resume_checkpoint is not None:
         resume_state = torch.load(
             config.resume_checkpoint, map_location="cpu", weights_only=False
         )
         if resume_state["label"] != "latest":
             raise ValueError("Resume requires a latest checkpoint")
-        if resume_state["run_config"] != run_config:
+        saved_run_config = resume_state["run_config"].copy()
+        saved_run_config.setdefault("id_prior_sources", ("revelio",))
+        extending_run = config.num_steps > saved_run_config["num_steps"]
+        if extending_run:
+            saved_run_config["num_steps"] = config.num_steps
+        if saved_run_config != run_config:
             raise ValueError("Resume configuration differs from the checkpoint")
         started_at = datetime.fromisoformat(resume_state["run_started_at"])
-        run_id = resume_state["run_id"]
-        config_hash = resume_state["config_hash"]
+        if extending_run:
+            run_id, config_hash = make_run_id(started_at, run_config)
+        else:
+            run_id = resume_state["run_id"]
+            config_hash = resume_state["config_hash"]
     else:
         started_at = datetime.now().astimezone()
         run_id, config_hash = make_run_id(started_at, run_config)
@@ -370,6 +379,17 @@ def run_experiment(config: ExperimentConfig) -> Path:
         best_score = float(resume_state["best_score"])
         best_state = resume_state["best_model_state_dict"]
         write_loss_log(loss_log_path, training_losses)
+        if extending_run and config.save_models and config.save_best_model:
+            save_live_checkpoint(
+                config.checkpoint_directory / f"{run_id}_best.pt",
+                {
+                    "run_id": run_id,
+                    "step": best_step,
+                    "label": "best",
+                    "run_config": run_config,
+                    "model_state_dict": best_state,
+                },
+            )
         restore_random_state(resume_state["random_state"])
         print(f"resuming after step {completed_step}", flush=True)
 
@@ -524,7 +544,7 @@ def parse_args() -> argparse.Namespace:
         description="Run a checkpointed benchmark experiment outside the notebook."
     )
     parser.add_argument("--random-seed", type=int, default=1337)
-    parser.add_argument("--num-steps", type=int, default=500)
+    parser.add_argument("--num-steps", type=int)
     parser.add_argument("--eval-every", type=int, default=50)
     parser.add_argument("--batch-size", type=int, default=16)
     parser.add_argument("--learning-rate", type=float, default=4e-3)
@@ -641,6 +661,11 @@ def config_from_args(args: argparse.Namespace) -> ExperimentConfig:
         if checkpoint["label"] != "latest":
             raise ValueError("Resume requires a latest checkpoint")
         saved = checkpoint["run_config"].copy()
+        requested_steps = getattr(args, "num_steps", None)
+        if requested_steps is not None:
+            if requested_steps < saved["num_steps"]:
+                raise ValueError("--num-steps cannot be below the checkpoint target")
+            saved["num_steps"] = requested_steps
         saved["results_directory"] = Path(saved["results_directory"])
         saved["checkpoint_directory"] = Path(saved["checkpoint_directory"])
         saved["frozen_dgp_configs"] = {
@@ -659,7 +684,7 @@ def config_from_args(args: argparse.Namespace) -> ExperimentConfig:
     frozen_dgp_configs = {} if args.no_frozen_dgp else {"person_dgp": FrozenDGPConfig()}
     return ExperimentConfig(
         random_seed=args.random_seed,
-        num_steps=args.num_steps,
+        num_steps=args.num_steps if args.num_steps is not None else ExperimentConfig().num_steps,
         eval_every=args.eval_every,
         batch_size=args.batch_size,
         learning_rate=args.learning_rate,

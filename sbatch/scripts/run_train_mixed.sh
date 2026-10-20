@@ -18,6 +18,11 @@ set -e
 export OMP_NUM_THREADS="$SLURM_CPUS_PER_TASK"
 ollama_args=()
 loss_args=()
+resume_args=()
+
+if [[ -n "${RESUME:-}" ]]; then
+    resume_args=(--resume "$RESUME")
+fi
 
 if [[ "${UNWEIGHTED:-0}" == 1 ]]; then
     loss_args=(--pos-weight 1)
@@ -52,4 +57,5 @@ time uv run --no-sync --no-dev python -m experiments.run_benchmark_experiment \
     --progress-every 25 \
     --save-models \
     "${loss_args[@]}" \
-    "${ollama_args[@]}"
+    "${ollama_args[@]}" \
+    "${resume_args[@]}"
