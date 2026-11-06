@@ -93,6 +93,7 @@ def load_model(
         num_attention_heads=run_config["num_attention_heads"],
         mlp_hidden_size=run_config["mlp_hidden_size"],
         num_layers=run_config["num_layers"],
+        cross_record_attention=run_config.get("cross_record_attention", True),
         max_categories=run_config["max_categories"],
         record_representation=run_config.get("record_representation", "mean_pool"),
         adjacency_decoder=run_config.get("adjacency_decoder", "pair_mlp"),

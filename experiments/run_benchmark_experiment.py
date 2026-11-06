@@ -64,6 +64,7 @@ class ExperimentConfig:
     num_attention_heads: int = 4
     mlp_hidden_size: int = 192
     num_layers: int = 3
+    cross_record_attention: bool = True
     max_categories: int = 128
     record_representation: Literal["mean_pool", "entity_target_column"] = (
         "entity_target_column"
@@ -172,6 +173,7 @@ def make_model(
         num_attention_heads=config.num_attention_heads,
         mlp_hidden_size=config.mlp_hidden_size,
         num_layers=config.num_layers,
+        cross_record_attention=config.cross_record_attention,
         max_categories=config.max_categories,
         record_representation=config.record_representation,
         adjacency_decoder=config.adjacency_decoder,
@@ -276,6 +278,7 @@ def run_experiment(config: ExperimentConfig) -> Path:
             raise ValueError("Resume requires a latest checkpoint")
         saved_run_config = resume_state["run_config"].copy()
         saved_run_config.setdefault("id_prior_sources", ("revelio",))
+        saved_run_config.setdefault("cross_record_attention", True)
         extending_run = config.num_steps > saved_run_config["num_steps"]
         if extending_run:
             saved_run_config["num_steps"] = config.num_steps
@@ -624,6 +627,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--num-attention-heads", type=int, default=4)
     parser.add_argument("--mlp-hidden-size", type=int, default=192)
     parser.add_argument("--num-layers", type=int, default=3)
+    parser.add_argument("--no-cross-record-attention", action="store_true")
     parser.add_argument("--max-categories", type=int, default=128)
     parser.add_argument(
         "--benchmark-name",
@@ -661,6 +665,11 @@ def config_from_args(args: argparse.Namespace) -> ExperimentConfig:
         if checkpoint["label"] != "latest":
             raise ValueError("Resume requires a latest checkpoint")
         saved = checkpoint["run_config"].copy()
+        if (
+            getattr(args, "no_cross_record_attention", False)
+            and saved.get("cross_record_attention", True)
+        ):
+            raise ValueError("Cannot resume an attention-on checkpoint with --no-cross-record-attention")
         requested_steps = getattr(args, "num_steps", None)
         if requested_steps is not None:
             if requested_steps < saved["num_steps"]:
@@ -711,6 +720,7 @@ def config_from_args(args: argparse.Namespace) -> ExperimentConfig:
         num_attention_heads=args.num_attention_heads,
         mlp_hidden_size=args.mlp_hidden_size,
         num_layers=args.num_layers,
+        cross_record_attention=not args.no_cross_record_attention,
         max_categories=args.max_categories,
         record_representation=args.record_representation,
         adjacency_decoder=args.adjacency_decoder,

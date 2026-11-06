@@ -28,6 +28,7 @@ class NanoERPFNModel(nn.Module):
         entity_slot_count: int = 300,
         num_slot_attention_layers: int = 1,
         identifier_embedding_size: int | None = None,
+        cross_record_attention: bool = True,
     ):
         """Initializes the feature encoder, transformer stack and adjacency decoder."""
         super().__init__()
@@ -42,7 +43,8 @@ class NanoERPFNModel(nn.Module):
         for _ in range(num_layers):
             self.transformer_blocks.append(
                 TransformerEncoderLayer(
-                    embedding_size, num_attention_heads, mlp_hidden_size
+                    embedding_size, num_attention_heads, mlp_hidden_size,
+                    cross_record_attention=cross_record_attention,
                 )
             )
 
@@ -265,15 +267,18 @@ class TransformerEncoderLayer(nn.Module):
         batch_first: bool = True,
         device=None,
         dtype=None,
+        cross_record_attention: bool = True,
     ):
         super().__init__()
-        self.self_attention_between_records = MultiheadAttention(
-            embedding_size,
-            num_attention_heads,
-            batch_first=batch_first,
-            device=device,
-            dtype=dtype,
-        )
+        self.cross_record_attention = cross_record_attention
+        if cross_record_attention:
+            self.self_attention_between_records = MultiheadAttention(
+                embedding_size,
+                num_attention_heads,
+                batch_first=batch_first,
+                device=device,
+                dtype=dtype,
+            )
         self.self_attention_between_columns = MultiheadAttention(
             embedding_size,
             num_attention_heads,
@@ -328,20 +333,21 @@ class TransformerEncoderLayer(nn.Module):
         cell_embeddings = self.column_attention_norm(cell_embeddings)
 
         # attention between records
-        cell_embeddings = cell_embeddings.transpose(1, 2)
-        cell_embeddings = cell_embeddings.reshape(
-            num_tables * num_columns, num_records, embedding_size
-        )
-        cell_embeddings = (
-            self.self_attention_between_records(
-                cell_embeddings, cell_embeddings, cell_embeddings
-            )[0]
-            + cell_embeddings
-        )
-        cell_embeddings = cell_embeddings.reshape(
-            num_tables, num_columns, num_records, embedding_size
-        )
-        cell_embeddings = cell_embeddings.transpose(2, 1)
+        if self.cross_record_attention:
+            cell_embeddings = cell_embeddings.transpose(1, 2)
+            cell_embeddings = cell_embeddings.reshape(
+                num_tables * num_columns, num_records, embedding_size
+            )
+            cell_embeddings = (
+                self.self_attention_between_records(
+                    cell_embeddings, cell_embeddings, cell_embeddings
+                )[0]
+                + cell_embeddings
+            )
+            cell_embeddings = cell_embeddings.reshape(
+                num_tables, num_columns, num_records, embedding_size
+            )
+            cell_embeddings = cell_embeddings.transpose(2, 1)
         cell_embeddings = self.record_attention_norm(cell_embeddings)
 
         # MLP after attention
