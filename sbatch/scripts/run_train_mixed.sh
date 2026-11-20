@@ -6,7 +6,7 @@
 #SBATCH --gpus=1
 #SBATCH --cpus-per-task=4
 #SBATCH --mem=16G
-#SBATCH --time=8:00:00
+#SBATCH --time=10:00:00
 #SBATCH --chdir=/lustre/isaac24/proj/UTK0526/idpfn
 #SBATCH --output=/lustre/isaac24/proj/UTK0526/idpfn/sbatch/out/id-prior-%j.out
 #SBATCH --mail-type=END,FAIL
@@ -18,6 +18,7 @@ set -e
 export OMP_NUM_THREADS="$SLURM_CPUS_PER_TASK"
 ollama_args=()
 loss_args=()
+aux_args=()
 resume_args=()
 
 if [[ -n "${RESUME:-}" ]]; then
@@ -26,6 +27,16 @@ fi
 
 if [[ "${UNWEIGHTED:-0}" == 1 ]]; then
     loss_args=(--pos-weight 1)
+fi
+
+if [[ -n "${AUX_LOSS:-}" ]]; then
+    aux_args+=(--aux-loss "$AUX_LOSS")
+fi
+if [[ -n "${AUX_LAMBDA:-}" ]]; then
+    aux_args+=(--aux-lambda "$AUX_LAMBDA")
+fi
+if [[ -n "${KOLEO_LAMBDA:-}" ]]; then
+    aux_args+=(--koleo-lambda "$KOLEO_LAMBDA")
 fi
 
 if [[ "${USE_OLLAMA:-0}" == 1 ]]; then
@@ -38,7 +49,6 @@ if [[ "${USE_OLLAMA:-0}" == 1 ]]; then
     ollama_args=(--id-prior-allow-ollama --id-prior-ollama-model llama3.2:1b --id-prior-ollama-augment-rate 0 --id-prior-ollama-corrupt-rate 0.001)
 fi
 
-uv pip install --python .venv/bin/python --torch-backend cu129 'torch==2.12.1+cu129'
 uv run --no-sync --no-dev python -c 'import torch; assert torch.cuda.is_available()'
 
 time uv run --no-sync --no-dev python -m experiments.run_benchmark_experiment \
@@ -57,5 +67,6 @@ time uv run --no-sync --no-dev python -m experiments.run_benchmark_experiment \
     --progress-every 25 \
     --save-models \
     "${loss_args[@]}" \
+    "${aux_args[@]}" \
     "${ollama_args[@]}" \
     "${resume_args[@]}"

@@ -16,12 +16,23 @@ import numpy as np
 import schedulefree
 import torch
 
+from identitypfn import contrastive_losses as cl
 from identitypfn.data_loader import SyntheticWorldDataLoader
 from identitypfn.model import NanoERPFNLinker, NanoERPFNModel
 from identitypfn.dgp.people.simple import ObservationConfig, generate_world
 from identitypfn.tokenizer import Tokenizer
 from identitypfn.train import eval_frame, load_benchmarks
 from identitypfn.utils import get_default_device, set_randomness_seed
+
+
+AUX_LOSSES = {
+    "supcon": cl.supervised_contrastive_loss,
+    "circle": cl.circle_loss,
+    "triplet": cl.triplet_loss,
+    "contrastive_margin": cl.contrastive_margin_loss,
+    "vicreg": cl.vicreg_loss,
+    "barlow": cl.barlow_twins_loss,
+}
 
 
 @dataclass
@@ -42,6 +53,12 @@ class ExperimentConfig:
     weight_decay: float = 0.0
     grad_clip_norm: float = 1.0
     pos_weight: float | None = None
+    aux_loss: Literal[
+        "none", "supcon", "circle", "triplet",
+        "contrastive_margin", "vicreg", "barlow",
+    ] = "none"
+    aux_lambda: float = 0.0
+    koleo_lambda: float = 0.0
     progress_every: int = 25
     train_generator: Literal["person", "wag", "id_prior", "bank"] = "person"
     revelio_root: str | None = None
@@ -107,6 +124,12 @@ class ExperimentConfig:
 def build_run_config(config: ExperimentConfig) -> dict:
     run_config = asdict(config)
     run_config.pop("resume_checkpoint")
+    if config.aux_loss == "none":
+        run_config.pop("aux_loss")
+    if config.aux_lambda == 0:
+        run_config.pop("aux_lambda")
+    if config.koleo_lambda == 0:
+        run_config.pop("koleo_lambda")
     if config.train_generator != "bank":
         run_config.pop("train_manifest")
     if config.id_prior_ollama_augment_rate is None:
@@ -239,10 +262,10 @@ def save_live_checkpoint(path: Path, payload: dict) -> None:
     os.replace(temporary_path, path)
 
 
-def write_loss_log(path: Path, losses: list[dict]) -> None:
+def write_loss_log(path: Path, losses: list[dict], columns: list[str]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     with path.open("w", newline="") as file:
-        writer = csv.DictWriter(file, fieldnames=["step", "weighted_training_loss"])
+        writer = csv.DictWriter(file, fieldnames=columns)
         writer.writeheader()
         writer.writerows(losses)
 
@@ -340,6 +363,13 @@ def run_experiment(config: ExperimentConfig) -> Path:
     config.results_directory.mkdir(parents=True, exist_ok=True)
     run_results_path = config.results_directory / f"{run_id}.csv"
     loss_log_path = config.results_directory / f"{run_id}_loss.csv"
+    use_aux = config.aux_lambda > 0 or config.koleo_lambda > 0
+    loss_columns = ["step", "weighted_training_loss"]
+    if use_aux:
+        loss_columns += [
+            "bce_loss", "aux_loss_value", "weighted_aux_loss",
+            "koleo_loss_value", "weighted_koleo_loss",
+        ]
     if run_results_path.exists():
         raise FileExistsError(f"Refusing to overwrite existing run: {run_results_path}")
     train_started_at = time.perf_counter()
@@ -355,7 +385,7 @@ def run_experiment(config: ExperimentConfig) -> Path:
         best_score = float(initial_frame["pr_auc"].mean())
         best_state = clone_state_dict(model)
         optimizer.train()
-        write_loss_log(loss_log_path, training_losses)
+        write_loss_log(loss_log_path, training_losses, loss_columns)
         if config.save_models and config.save_best_model:
             save_live_checkpoint(
                 config.checkpoint_directory / f"{run_id}_best.pt",
@@ -381,7 +411,7 @@ def run_experiment(config: ExperimentConfig) -> Path:
         best_step = int(resume_state["best_step"])
         best_score = float(resume_state["best_score"])
         best_state = resume_state["best_model_state_dict"]
-        write_loss_log(loss_log_path, training_losses)
+        write_loss_log(loss_log_path, training_losses, loss_columns)
         if extending_run and config.save_models and config.save_best_model:
             save_live_checkpoint(
                 config.checkpoint_directory / f"{run_id}_best.pt",
@@ -404,30 +434,60 @@ def run_experiment(config: ExperimentConfig) -> Path:
         tokenized_cells = move_to_device(
             tokenizer(full_data["records"], full_data["field_types"]), device
         )
-        targets = full_data["adjacency"].to(device).float()
-        logits = model(tokenized_cells)
+        matches = full_data["adjacency"].to(device)
+        targets = matches.float()
+        if use_aux:
+            logits, extras = model(tokenized_cells, return_extras=True)
+        else:
+            logits = model(tokenized_cells)
         mask = torch.triu(torch.ones_like(targets, dtype=torch.bool), diagonal=1)
         pair_logits = logits[mask]
         pair_targets = targets[mask]
         num_positive = pair_targets.sum()
         num_negative = pair_targets.numel() - num_positive
-        loss = torch.nn.functional.binary_cross_entropy_with_logits(
+        bce_loss = torch.nn.functional.binary_cross_entropy_with_logits(
             pair_logits,
             pair_targets,
             pos_weight=num_negative / num_positive
             if config.pos_weight is None
             else torch.tensor(config.pos_weight, device=pair_logits.device),
         )
+        if use_aux:
+            embeddings = extras["record_embeddings"]
+            zero = bce_loss.new_zeros(())
+            aux_value = (
+                AUX_LOSSES[config.aux_loss](embeddings, matches)
+                if config.aux_lambda > 0 else zero
+            )
+            koleo_value = (
+                cl.koleo_loss(embeddings)
+                if config.koleo_lambda > 0 else zero
+            )
+            loss = (
+                bce_loss
+                + config.aux_lambda * aux_value
+                + config.koleo_lambda * koleo_value
+            )
+        else:
+            loss = bce_loss
         loss.backward()
         torch.nn.utils.clip_grad_norm_(model.parameters(), config.grad_clip_norm)
         optimizer.step()
-        training_losses.append(
-            {"step": step, "weighted_training_loss": float(loss.detach().cpu())}
-        )
+        loss_row = {
+            "step": step,
+            "weighted_training_loss": float(loss.detach().cpu()),
+        }
+        if use_aux:
+            loss_row.update({
+                "bce_loss": float(bce_loss.detach().cpu()),
+                "aux_loss_value": float(aux_value.detach().cpu()),
+                "weighted_aux_loss": float((config.aux_lambda * aux_value).detach().cpu()),
+                "koleo_loss_value": float(koleo_value.detach().cpu()),
+                "weighted_koleo_loss": float((config.koleo_lambda * koleo_value).detach().cpu()),
+            })
+        training_losses.append(loss_row)
         with loss_log_path.open("a", newline="") as file:
-            csv.writer(file).writerow(
-                [step, training_losses[-1]["weighted_training_loss"]]
-            )
+            csv.DictWriter(file, fieldnames=loss_columns).writerow(loss_row)
 
         if config.progress_every > 0 and step % config.progress_every == 0:
             elapsed_seconds = time.perf_counter() - train_started_at
@@ -554,6 +614,13 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--weight-decay", type=float, default=0.0)
     parser.add_argument("--grad-clip-norm", type=float, default=1.0)
     parser.add_argument("--pos-weight", type=float, default=None)
+    parser.add_argument(
+        "--aux-loss",
+        choices=["none", *AUX_LOSSES],
+        default="none",
+    )
+    parser.add_argument("--aux-lambda", type=float, default=0.0)
+    parser.add_argument("--koleo-lambda", type=float, default=0.0)
     parser.add_argument("--progress-every", type=int, default=25)
     parser.add_argument(
         "--train-generator",
@@ -682,6 +749,10 @@ def config_from_args(args: argparse.Namespace) -> ExperimentConfig:
             for name, value in saved["frozen_dgp_configs"].items()
         }
         return ExperimentConfig(**saved, resume_checkpoint=args.resume)
+    if args.aux_lambda < 0 or args.koleo_lambda < 0:
+        raise ValueError("Auxiliary loss weights must be nonnegative")
+    if (args.aux_loss == "none") != (args.aux_lambda == 0):
+        raise ValueError("--aux-loss and --aux-lambda must be set together")
     for rate in (args.id_prior_ollama_augment_rate, args.id_prior_ollama_corrupt_rate):
         if rate is not None and not 0 <= rate <= 1:
             raise ValueError("id-prior Ollama rates must be between 0 and 1")
@@ -700,6 +771,9 @@ def config_from_args(args: argparse.Namespace) -> ExperimentConfig:
         weight_decay=args.weight_decay,
         grad_clip_norm=args.grad_clip_norm,
         pos_weight=args.pos_weight,
+        aux_loss=args.aux_loss,
+        aux_lambda=args.aux_lambda,
+        koleo_lambda=args.koleo_lambda,
         progress_every=args.progress_every,
         train_generator=args.train_generator,
         revelio_root=args.revelio_root,
